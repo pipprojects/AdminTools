@@ -1,0 +1,73 @@
+#!/bin/ksh
+#
+
+#
+CLASS="disk"
+#
+echo "#HW_ID,HWADD,VENDOR TYPE,SIZEMB"
+echo "#=====,=====,===========,======"
+TMPFILE="/tmp/ioscan.f.$$"
+ioscan -f > $TMPFILE
+let "hw_id=100"
+for hw in `ioscan -fk | awk '{if ( $1 ~ /^'"$CLASS"'$/ ) print $3}'`
+do
+ hwC=`echo $hw | sed -e s@"\/"@"\\\\\/"@g`
+ case $HPUXVER in
+        10)
+		rdisk=`ioscan -fnkH $hw | tail -n +4 | awk '{for (i=1;i<=NF;i++){print $i}}' | grep "rdsk" | line`
+        ;;
+        09)
+		rdisk=`ioscan -fnkH $hw | tail -n +4 | awk '{for (i=1;i<=NF;i++){print $i}}' | grep "rdsk" | grep "s2$" | line`
+        ;;
+        *)
+                echo "ERROR : HPUXVER not set"
+                exit 1
+ esac
+ diskinfo $rdisk > /dev/null 2>&1
+ if [ $? -ne 0 ]
+ then
+  case $HPUXVER in
+        10)
+        ;;
+        09)
+		VENDOR=""
+		TYPE=""
+        ;;
+        *)
+                echo "ERROR : HPUXVER not set"
+                exit 1
+  esac
+  SIZE=""
+  let "SIZEMB=0"
+ else
+  case $HPUXVER in
+        10)
+ 
+        ;;
+        09)
+		VENDOR=`diskinfo $rdisk | awk '{if ($1 ~ /vendor:/ ) print $2}'`
+		TYPE=`diskinfo $rdisk | awk '{if ($1 ~ /product/ ) print $3}'`
+        ;;
+        *)
+                echo "ERROR : HPUXVER not set"
+                exit 1
+  esac
+  SIZE=`diskinfo $rdisk | awk '{if ($1 ~ /size:/ ) print $2}'`
+  let "SIZEMB=SIZE/1024"
+ fi
+ case $HPUXVER in
+        10)
+		VENDOR=`cat $TMPFILE | awk '{if ( $3 ~ /^'"$hwC"'$/) print $7}'`
+		TYPE=`cat $TMPFILE | awk '{if ( $3 ~ /^'"$hwC"'$/) print $8" "$9" "$10}'`
+        ;;
+        09)
+        ;;
+        *)
+                echo "ERROR : HPUXVER not set"
+                exit 1
+ esac
+ let "hw_id=hw_id+1"
+ echo "$hw_id,$hw,$VENDOR $TYPE,$SIZEMB"
+done
+rm $TMPFILE
+

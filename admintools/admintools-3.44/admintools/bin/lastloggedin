@@ -1,0 +1,10 @@
+#!/bin/ksh
+#
+
+echo "Please enter username > \c"
+read USERNAME
+
+echo
+
+last -R $USERNAME | head -20
+

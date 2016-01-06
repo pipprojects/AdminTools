@@ -1,0 +1,1147 @@
+#!/bin/bash
+#
+#*****************************************************************************
+#
+# Name          Description                     	Version Date
+#
+# Rob Dancer    Template Version taken from 		1.0	2 Dec 2004
+#		genPicoLicence.sh
+#
+# Rob Dancer    Move definitions to admntools.src	1.1     28 November 2006
+#
+# Rob Dancer	Change !Quite" to "Quiet"		1.2	11 April 2007
+#
+# Rob Dancer	Version for funstions file		1.0	9 May 2007
+#
+# Rob Dancer	Add server name check			1.1	11 May 2007
+#
+# Rob Dancer	V1.2	2 October 2007
+# Add FTPUser
+#
+# Rob Dancer	1.3	3 March 2008
+# Linux type
+# Check ssh status return
+# Spell "Process" correctlly from "Processe"
+#
+# Rob Dancer	1.4	16 September 2008
+# Add SendMail function
+# Add _ADM__GetUserDetails wrapper function
+#
+# Rob Dancer	1.5	17 September 2008
+# Add sendmail variable
+#
+# Rob Dancer	1.6	25 September 2008
+# Add Exchange user for user.info
+# Add function _ADM__getnamebycomment
+#
+# Rob Dancer	1.7	26 September 2008
+# Changed timeout form 10 to 15
+# _ADM_WAIT=15
+#
+# Rob Dancer	1.8	01 October 2008
+# Add UIUSERLEFT
+#
+# Rob Dancer	1.9	27 March 2009
+# Add $_CLEANFILE paramater so Outlook displays text properly
+# This adds 2 spaces at the beginning of the line
+#
+# Rob DAncer	2.0	6 April 2009
+# If _ADM_WAIT is 0, then trat as null or empty
+#
+# Rob Dancer	2.1	21 April 2009
+# Add UIDATALOCATION
+#
+# Rob Dancer	2.2	28 April 2009
+# Add UITESTUSER
+#
+# Rob Dancer	2.3	2 Decemner 2009
+# Add _ADM__df and _ADM__ConvertNumber
+# Add _ADM__NET_CheckIP to call _ADM_NET_CheckIP
+#
+# Rob Dancer	2.4	23 February 2010
+# Add UICOGNIDOXUSER
+#
+# Rob Dancer	3.0	22 June 2010
+# Add UIPORSYSTEMUSER
+#
+# Rob Dancer	3.1	1 September 2010
+# add function
+# function _ADM__ConvertNumberMultiplier {
+#
+# Rob Dancer	4.0	13 April 2011
+# Add UIEXCHANGEDOMAIN
+#
+# Rob Dancer	5.0	03 May 2012
+# Add UIPDS
+#
+# Rob Dancer	6.0	15 May 2012
+# Change sed funstion to change line to awk
+#
+#*****************************************************************************
+#
+# ADM statuses
+#
+_ADM__NONIS=101
+_ADM__NOYPWHICH=102
+_ADM__SHNOREAD=103
+_ADM__SENDMAIL=""
+if [ -e /usr/sbin/sendmail ]
+then
+ _ADM__SENDMAIL="/usr/sbin/sendmail"
+elif [ -e /usr/lib/sendmail ]
+then
+ _ADM__SENDMAIL="/usr/lib/sendmail"
+fi
+#
+# Exit function
+#
+function _ADM__exit {
+ if [ $VERBOSE -eq 1 ]
+ then
+  _ADM__Log 1 "Ending $PROGNAME" 0 $SENDEML 1
+ fi
+ exit $1
+}
+#
+# Help function 
+#               
+function _ADM__printHelp {
+ let "i=1"
+ while [ $i -le $NUMHELP ]
+ do
+  echo "${HELPINFO[${i}]}"
+  let "i=i+1"   
+ done
+} 
+#
+# Examples
+#               
+function _ADM__printExamples {
+ echo
+ echo
+ echo "Example 1. Print Help"
+ echo " $PROGNAME -h"
+ echo
+ echo "Example 2. Print Help and Examples"
+ echo " $PROGNAME -H"
+ echo
+}
+#
+# Log function
+#
+function _ADM__Log {
+ _LEVEL=$1
+ _MESSAGE="$2"
+ _OUTSDT=$3
+ _OUTEML=$4
+ _OUTLGF=$5
+ _VERBOSE="$6"
+ _VLEVEL="$7"
+#
+ if [ -z "$_VERBOSE" ]
+ then
+  let "_VERBOSE = 0"
+ fi
+ if [ -z "$_VLEVEL" ]
+ then
+  let "_VLEVEL = 0"
+ fi
+#
+ _LOGLEVELNONE=0
+ _LOGLEVELINFO=1
+ _LOGLEVELWARN=2
+ _LOGLEVELERR=3
+#
+ _ALEVEL[${_LOGLEVELNONE}]=""
+ _ALEVEL[${_LOGLEVELINFO}]="Info: "
+ _ALEVEL[${_LOGLEVELWARN}]="Warning: "
+ _ALEVEL[${_LOGLEVELERR}]="Error: "
+#
+ if [ $_VERBOSE -ge $_VLEVEL ]
+ then
+#
+  _MLEVEL=${_ALEVEL[${_LEVEL}]}
+  if [ $_LEVEL -eq $_LOGLEVELNONE ]
+  then
+   _DATESTAMPL=""
+   _PROGINFO=""
+  else
+   _DATESTAMPL="`date` "
+   _PROGINFO="${PROGNAME}[${CPID}]: "
+  fi
+  _MESSAGEOUT="${_DATESTAMPL}${_PROGINFO}${_MLEVEL}${_MESSAGE}"
+#
+# Send message to screen
+#
+  if [ "$_OUTSDT" -ne 0 ]
+  then
+   echo $_MESSAGEOUT
+  fi
+#
+# Send message to Email
+#
+  if [ "$_OUTEML" -ne 0 ]
+  then
+   echo $_MESSAGEOUT >> $_EMAILLOGFILE
+  fi
+#
+# Send message log file
+#
+  if [ "$_OUTLGF" -ne 0 ]
+  then
+   echo $_MESSAGEOUT >> $APPLOGFILE
+  fi
+#
+# Set send email flag
+#
+  if [ $_LEVEL -eq $_LOGLEVELERR ]
+  then
+   LOGERROR=1
+  fi
+#
+ fi
+#
+}
+#
+# Get STDOUT
+#
+function _ADM__getOutput {
+ COMMAND="$*"
+ $COMMAND > $TMPFILE 2>&1
+ if [ $SENDSTD -eq 1 ]
+ then
+  cat $TMPFILE
+ fi
+ if [ $VERBOSE -eq 1 ]
+ then
+  TMPINFO=$(cat $TMPFILE)
+  _ADM__Log 1 "$TMPINFO" 0 $SENDEML 1
+  rm -f $TMPFILE
+ fi
+}
+#
+# Check server up
+#
+# This function should not be used directly. Use
+# /opt/admintools/bin/_adm_testlogin.sh -s "$_ADM_SERVER" -f "$_ADM_FILE" &
+# instead
+#
+# 1=server
+# 2=communications file
+#
+#
+function _ADM__TestLogin {
+ _ADM_SERVER=$1
+ _ADM_FILE=$2
+#
+#
+# echo "Logging in"
+# echo "PID:$$"
+ echo "PID:$$" >> $_ADM_FILE
+ echo "FIN:0" >> $_ADM_FILE
+#
+ ping -c 1 "${_ADM_SERVER}" >/dev/null 2>&1
+ if [ $? -eq 0 ]
+ then
+  echo "NAMEOK:1" >> $_ADM_FILE
+#
+  _SSHSTAT="0"
+  echo "ssh $_ADM_SERVER echo" >> $_ADM_FILE
+  ssh $_ADM_SERVER echo > /dev/null 2>&1
+  _SSHSTAT="$?"
+#  sleep 20
+ else
+  echo "NAMEOK:0" >> $_ADM_FILE
+# echo "Logged in"
+ fi
+#
+ _ADM_FINSIHED=1
+ echo "FIN:1" >> $_ADM_FILE
+ echo "SSHSTAT:$_SSHSTAT" >> $_ADM_FILE
+#
+ exit
+#
+}
+#
+# Check to see if the server can be logged in
+# 1=server name
+# 2=timeout time to wait
+#
+function _ADM__CheckLogin {
+#
+_ADM_SERVER=$1
+_ADM_WAIT=$2
+#if [ -n "${_ADM_PRINT}" ]
+#then
+# if [ "$_ADM_PRINT" -eq 0 ]
+# then
+#  let "_ADM_PRINT=0"
+# else
+#  let "_ADM_PRINT=1"
+# fi
+#else
+# let "_ADM_PRINT=0"
+#fi
+if [ -z "${_ADM_WAIT}" -o "${_ADM_WAIT}" == 0 ]
+then
+ _ADM_WAIT=15
+fi
+#
+_ADM_FINISHED=0
+let "_ADM_FFINSIHED=0"
+_ADM_NAME=$(basename $0)
+_ADM_FILE="/tmp/tmp.${_ADM_NAME}.$$.${RANDOM}tmp"
+#
+echo "FIN:0" > $_ADM_FILE
+#
+#_ADM__TestLogin $_ADM_SERVER $_ADM_FILE &
+/opt/admintools/bin/_adm_testlogin.sh -s "$_ADM_SERVER" -f "$_ADM_FILE" &
+#
+if [ -z "$SENDEML" ]
+then
+ SENDEML=0
+fi
+#
+let "_ADM_i=0"
+_ADM__Log 1 "Waiting for login to $_ADM_SERVER" 1 $SENDEML 1
+while [ $_ADM_i -le $_ADM_WAIT ]
+do
+ if [ $_ADM_FINISHED -ne 1 ]
+ then
+  sleep 1
+  _ADM_FFINISHED=$(cat $_ADM_FILE | grep "^FIN:" | tail -1 | cut -d ":" -f2)
+  _ADM_FSSHSTAT=$(cat $_ADM_FILE | grep "^SSHSTAT:" | tail -1 | cut -d ":" -f2)
+#  if [ $_ADM_PRINT -eq 1 ]
+#  then
+#   printf "#%s"
+#  fi
+  if [ $_ADM_FFINISHED = "1" ]
+  then
+   let "_ADM_FINISHED=1"
+  fi
+ fi
+#
+ let "_ADM_i=_ADM_i+1"
+#
+done
+#
+_ADM__Log 1 "Finished waiting" 1 $SENDEML 1
+#
+if [ ${_ADM_FINISHED} = 1 ]
+then
+ _ADM__Log 1 "Process finished OK" 1 $SENDEML 1
+ if [ "${_ADM_FSSHSTAT}" = 0 ]
+ then
+  let "_ADM_SSHLOGIN=1"
+ else
+  let "_ADM_SSHLOGIN=2"
+ fi
+else
+ _ADM__Log 1 "Process not finished - killing" 1 $SENDEML 1
+ _ADM_FPID=$(cat $_ADM_FILE | grep "^PID:" | tail -1 | cut -d ":" -f2)
+ _ADM_THERE=$(ps -ef | grep " $_ADM_FPID " | grep -v "grep ")
+ if [ -n "$_ADM_FPID" ]
+ then
+  if [ -n "${_ADM_THERE}" ]
+  then
+   kill $_ADM_FPID
+   sleep 1
+   _ADM_THERE=$(ps -ef | grep " $_ADM_FPID " | grep -v "grep ")
+   if [ -n "${_ADM_THERE}" ]
+   then
+    kill -9 $_ADM_FPID
+    sleep 1
+    _ADM_THERE=$(ps -ef | grep " $_ADM_FPID " | grep -v "grep ")
+    if [ -n "${_ADM_THERE}" ]
+    then
+     _ADM__Log 1 "Process not killed" 1 $SENDEML 1
+    else
+     _ADM__Log 1 "Process killed with -9" 1 $SENDEML 1
+    fi
+   else
+    _ADM__Log 1 "Process killed" 1 $SENDEML 1
+   fi
+  else
+   _ADM__Log 1 "Process already killed" 1 $SENDEML 1
+  fi
+ fi
+ let "_ADM_SSHLOGIN=0"
+fi
+_ADM_NAMEOK=$(cat $_ADM_FILE | grep "^NAMEOK:" | tail -1 | cut -d ":" -f2)
+#
+if [ -e $_ADM_FILE ]
+then
+ rm -f $_ADM_FILE
+fi
+#
+}
+#
+# Function to return user details
+#
+function _GetUserDetails {
+ A="$1"
+ B="$2"
+ _ADM__GetUserDetails "$A" "$B"
+}
+function _ADM__GetUserDetails {
+ _ADM__STATUS=0
+ _OK=0
+ _USERNAME=$1
+ _ADM__LOCAL=$2
+ if [ -z "$_ADM__LOCAL" ]
+ then
+  _ADM__LOCAL="Y"
+ fi
+ case $_ADM__LOCAL in
+	1|Y|y)
+	   _PWFILE="/etc/passwd"
+	   _SHFILE="/etc/shadow"
+	   _LINE1=$(cat $_PWFILE | grep "^${_USERNAME}:")
+	   if [ -e $_SHFILE ]
+	   then
+	    if [ -r $_SHFILE ]
+	    then
+	     _LINE2=$(cat $_SHFILE | grep "^${_USERNAME}:")
+	    else
+	     _ADM__Log 2 "Cannot read shadow file" 1 $SENDEML 1
+	     _LINE2=$_LINE1
+	     _ADM__STATUS=$_ADM__SHNOREAD
+	    fi
+	    _LINE=$(echo "${_LINE1}:${_LINE2}" | awk -F ":" '{printf "%s:%s:%s:%s:%s:%s:%s",$1,$9,$3,$4,$5,$6,$7}')
+	   else
+	    _LINE=$_LINE1
+	   fi
+	;;
+	*)
+#
+	 which ypwhich > /dev/null 2>&1
+	 if [ $? -eq 0 ]
+	 then
+	  ypwhich > /dev/null 2>&1
+	  if [ $? -eq 0 ]
+	  then
+	   _LINE=$(ypmatch ${_USERNAME} passwd)
+	  else
+	   _ADM__Log 3 "NIS not set up" 1 $SENDEML 1
+	   _ADM__STATUS=$_ADM__NONIS
+	   _OK=1
+	  fi
+	 else
+	  _ADM__Log 3 "Cannot find ypwhich command" 1 $SENDEML 1
+	  _ADM__STATUS=$_ADM__NOYPWHICH
+	  _OK=1
+	 fi
+	;;
+ esac
+#
+ if [ $_OK -eq 0 ]
+ then
+  UUSERNAME=$(echo $_LINE | cut -d ":" -f1)
+  UPASSWORD=$(echo $_LINE | cut -d ":" -f2)
+  UUID=$(echo $_LINE | cut -d ":" -f3)
+  UGID=$(echo $_LINE | cut -d ":" -f4)
+  UCOMMENT=$(echo $_LINE | cut -d ":" -f5)
+  UHDIR=$(echo $_LINE | cut -d ":" -f6)
+  USHELL=$(echo $_LINE | cut -d ":" -f7)
+ fi
+}
+#
+# Get username by UID
+#
+function _ADM__getnamebyuid {
+ UUID=$1
+ UUSERNAME=$(ypcat passwd | awk -F ":" -v ID="${UUID}" '{if ( $3 == ID ){print $1}}')
+}
+#
+# Get UID by username
+#
+function _ADM__getuidbyname {
+ UUSERNAME=$1
+ UUID=$(ypcat passwd | awk -F ":" -v ID="${UUSERNAME}" '{if ( $1 == ID ){print $3}}')
+}
+#
+# Get username by Name
+#
+function _ADM__getnamebycomment {
+ UUCOMMENT="$1"
+ UUSERNAME=$(ypcat passwd | awk -F ":" -v ID="${UUCOMMENT}" '{if ( $5 == ID ){print $1}}')
+}
+#
+# Get groupname by GID
+#
+function _ADM__getgroupbygid {
+ UGID=$1
+ UGROUP=$(ypcat group | awk -F ":" -v ID="${GUID}" '{if ( $3 == ID ){print $1}}')
+}
+#
+# Get GID by groupname
+#
+function _ADM__getgidbygroup {
+ UGROUP=$1
+ UGID=$(ypcat group | awk -F ":" -v ID="${UGROUP}" '{if ( $1 == ID ){print $3}}')
+}
+#
+# Set up user info data
+#
+# 1=username
+# 2=user.info file
+#
+function _ADM__GetUserInfo {
+#
+ _USERNAME="$1"
+ _UIFILE="$2"
+#1_username:2_crypt_passwd:3_uid:4_gid:5_Comment:6_shell:7_pc_name:8_pc_ip:9_add_samba:10_pc_macid:11_vpn_user:12_allow_email_options:13_allow_change_password:14_allow_piconet:15_allow_antispam:16_cvs_user:17_group:18_in_Bath:19_Picochip_Employee:20_mail_user:21_active_user:22_login_enabled:23_Date_created:24_admin_user:25_location:26_FTP_User:27_Exchange_User:28_User_Left:29_Data_Location
+#
+ _LINE=$(cat $_UIFILE | grep "^${_USERNAME}:")
+ UIUSERNAME=$(echo $_LINE | cut -d ":" -f1)
+ UIPASSWORD=$(echo $_LINE | cut -d ":" -f2)
+ UIUID=$(echo $_LINE | cut -d ":" -f3)
+ UIGID=$(echo $_LINE | cut -d ":" -f4)
+ UICOMMENT=$(echo $_LINE | cut -d ":" -f5)
+ UISHELL=$(echo $_LINE | cut -d ":" -f6)
+ UIPCNAME=$(echo $_LINE | cut -d ":" -f7)
+ UIPCIP=$(echo $_LINE | cut -d ":" -f8)
+ UIADDSAMBA=$(echo $_LINE | cut -d ":" -f9)
+ UIPCMACID=$(echo $_LINE | cut -d ":" -f10)
+ UIVPNUSER=$(echo $_LINE | cut -d ":" -f11)
+ UIALLOWEMAILOPT=$(echo $_LINE | cut -d ":" -f12)
+ UIALLOWCHANGEPW=$(echo $_LINE | cut -d ":" -f13)
+ UIALLOWPICONET=$(echo $_LINE | cut -d ":" -f14)
+ UIALLOWANTISPAM=$(echo $_LINE | cut -d ":" -f15)
+ UICVSUSER=$(echo $_LINE | cut -d ":" -f16)
+ UIGROUP=$(echo $_LINE | cut -d ":" -f17)
+ UIINBATH=$(echo $_LINE | cut -d ":" -f18)
+ UIPCEMPLOYEE=$(echo $_LINE | cut -d ":" -f19)
+ UIMAILUSER=$(echo $_LINE | cut -d ":" -f20)
+ UIACTIVEUSER=$(echo $_LINE | cut -d ":" -f21)
+ UILOGINENABLED=$(echo $_LINE | cut -d ":" -f22)
+ UIDATECREATED=$(echo $_LINE | cut -d ":" -f23)
+ UIADMINUSER=$(echo $_LINE | cut -d ":" -f24)
+ UILOCATION=$(echo $_LINE | cut -d ":" -f25)
+ UIFTPUSER=$(echo $_LINE | cut -d ":" -f26)
+ UIEXCHANGEUSER=$(echo $_LINE | cut -d ":" -f27)
+ UIUSERLEFT=$(echo $_LINE | cut -d ":" -f28)
+ UIDATALOCATION=$(echo $_LINE | cut -d ":" -f29)
+ UITESTUSER=$(echo $_LINE | cut -d ":" -f30)
+ UICOGNIDOXUSER=$(echo $_LINE | cut -d ":" -f31)
+ UIPORSYSTEMUSER=$(echo $_LINE | cut -d ":" -f32)
+ UIEXCHANGEDOMAIN=$(echo $_LINE | cut -d ":" -f33)
+ UIPDS=$(echo $_LINE | cut -d ":" -f34)
+#
+ echo "UIUSERNAME=\"$UIUSERNAME\""
+ echo "UIPASSWORD=\"$UIPASSWORD\""
+ echo "UIUID=\"$UIUID\""
+ echo "UIGID=\"$UIGID\""
+ echo "UICOMMENT=\"$UICOMMENT\""
+ echo "UISHELL=\"$UISHELL\""
+ echo "UIPCNAME=\"$UIPCNAME\""
+ echo "UIPCIP=\"$UIPCIP\""
+ echo "UIADDSAMBA=\"$UIADDSAMBA\""
+ echo "UIPCMACID=\"$UIPCMACID\""
+ echo "UIVPNUSER=\"$UIVPNUSER\""
+ echo "UIALLOWEMAILOPT=\"$UIALLOWEMAILOPT\""
+ echo "UIALLOWCHANGEPW=\"$UIALLOWCHANGEPW\""
+ echo "UIALLOWPICONET=\"$UIALLOWPICONET\""
+ echo "UIALLOWANTISPAM=\"$UIALLOWANTISPAM\""
+ echo "UICVSUSER=\"$UICVSUSER\""
+ echo "UIGROUP=\"$UIGROUP\""
+ echo "UIINBATH=\"$UIINBATH\""
+ echo "UIPCEMPLOYEE=\"$UIPCEMPLOYEE\""
+ echo "UIMAILUSER=\"$UIMAILUSER\""
+ echo "UIACTIVEUSER=\"$UIACTIVEUSER\""
+ echo "UILOGINENABLED=\"$UILOGINENABLED\""
+ echo "UIDATECREATED=\"$UIDATECREATED\""
+ echo "UIADMINUSER=\"$UIADMINUSER\""
+ echo "UILOCATION=\"$UILOCATION\""
+ echo "UIFTPUSER=\"$UIFTPUSER\""
+ echo "UIEXCHANGEUSER=\"$UIEXCHANGEUSER\""
+ echo "UIUSERLEFT=\"$UIUSERLEFT\""
+ echo "UIDATALOCATION=\"$UIDATALOCATION\""
+ echo "UITESTUSER=\"$UITESTUSER\""
+ echo "UICOGNIDOXUSER=\"$UICOGNIDOXUSER\""
+ echo "UIPORSYSTEMUSER=\"$UIPORSYSTEMUSER\""
+ echo "UIEXCHANGEDOMAIN=\"$UIEXCHANGEDOMAIN\""
+ echo "UIPDS=\"$UIPDS\""
+#
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Function to get user details
+#
+# 1=username
+# 2=user.info file
+#
+function _ADM__SetUpUserInfo {
+#
+# Source setup file
+#
+_USERNAME="$1"
+_UIFILE="$2"
+#
+# Check bounds of OPTION
+#
+if [ -z "$_USERNAME" ]
+then
+ _ADM__Log 3 "Username required." 1 $SENDEML 1
+ EXITSTAT=1
+ _ADM__exit $EXITSTAT
+fi
+#
+# Check bounds of _UIFILE
+#
+if [ -z "$_UIFILE" ]
+then
+ _ADM__Log 3 "Filename required" 1 $SENDEML 1
+ EXITSTAT=2
+ _ADM__exit $EXITSTAT
+else
+ if [ ! -r "$_UIFILE" ]
+ then
+  _ADM_ _Log 3 "File $_UIFILE does not exist or cannot be opened" 1 $SENDEML 1
+  EXITSTAT=3
+  _ADM__exit $EXITSTAT
+ fi
+fi
+#
+# Do Main
+#
+_ADM__GetUserInfo "$_USERNAME" "$_UIFILE"
+#
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+}
+#
+# Write user.info file
+#
+function _ADM__WriteUserInfo {
+#
+# Source setup file
+#
+_USERNAME="$1"
+_UIFILE="$2"
+#
+# Check bounds of OPTION
+#
+if [ -z "$_USERNAME" ]
+then
+ _ADM__Log 3 "Username required." 1 $SENDEML 1
+ EXITSTAT=1
+ _ADM__exit $EXITSTAT
+fi
+#
+# Check bounds of _UIFILE
+#
+if [ -z "$_UIFILE" ]
+then
+ _ADM__Log 3 "Filename required" 1 $SENDEML 1
+ EXITSTAT=2
+ _ADM__exit $EXITSTAT
+else
+ if [ -e $_UIFILE -a ! -r "$_UIFILE" ]
+ then
+  _ADM__Log 3 "File $_UIFILE exists and cannot be opened" 1 $SENDEML 1
+  EXITSTAT=3
+  _ADM__exit $EXITSTAT
+ fi
+fi
+#
+_ADM__SetUserInfo
+#
+_TMPFILE="/tmp/tmp._ADM__SUI.$$.tmp"
+#cat $_UIFILE | sed -e s@"^${_USERNAME}:.*$"@"$_LINE"@g > $_TMPFILE
+cat $_UIFILE | awk -F ":" -v USERNAME="${_USERNAME}" -v LINE="${_LINE}" '{if ( $1 == USERNAME ) {
+			    printf "%s\n",LINE
+			} else {
+			    printf "%s\n",$0
+			}
+			}' > $_TMPFILE
+if [ $_UIFILE != "-" ]
+then
+ cat $_TMPFILE > $_UIFILE
+else
+ cat $_TMPFILE
+fi
+rm -f $_TMPFILE
+#
+}
+#
+# Set user.info details
+#
+function _ADM__SetUserInfo {
+#
+#1_username:2_crypt_passwd:3_uid:4_gid:5_Comment:6_shell:7_pc_name:8_pc_ip:9_add_samba:10_pc_macid:11_vpn_user:12_allow_email_options:13_allow_change_password:14_allow_piconet:15_allow_antispam:16_cvs_user:17_group:18_in_Bath:19_Picochip_Employee:20_mail_user:21_active_user:22_login_enabled:23_Date_created:24_admin_user:25_location:26_FTP_User:27_Exchange_User:28_User_Left:29_Data_Location:30_Test_User:31_Cognidox_User:32_PORSystemUser33_Exchange_Domain:34_Password_Delegation_Source:
+
+#
+ _LINE="${UIUSERNAME}:${UIPASSWORD}:${UIUID}:${UIGID}:${UICOMMENT}:${UISHELL}:${UIPCNAME}:${UIPCIP}:${UIADDSAMBA}:${UIPCMACID}:${UIVPNUSER}:${UIALLOWEMAILOPT}:${UIALLOWCHANGEPW}:${UIALLOWPICONET}:${UIALLOWANTISPAM}:${UICVSUSER}:${UIGROUP}:${UIINBATH}:${UIPCEMPLOYEE}:${UIMAILUSER}:${UIACTIVEUSER}:${UILOGINENABLED}:${UIDATECREATED}:${UIADMINUSER}:${UILOCATION}:${UIFTPUSER}:${UIEXCHANGEUSER}:${UIUSERLEFT}:${UIDATALOCATION}:${UITESTUSER}:${UICOGNIDOXUSER}:${UIPORSYSTEMUSER}:${UIEXCHANGEDOMAIN}:${UIPDS}:"
+ #echo "$_LINE"
+#
+}
+#
+# Get Linux Version
+#
+function _ADM__GetLinuxVersion {
+#
+  _SERVER="$1"
+#
+ if [ "$_SERVER" = "-1" ]
+ then
+  _COM=""
+ else
+  _COM="ssh $_SERVER"
+ fi
+#
+ _RLFILE="/etc/redhat-release"
+#
+# CentOS release 4.5 (Final)
+# White Box Enterprise Linux release 3.0 (Liberation)
+# Red Hat Enterprise Linux ES release 4 (Nahant Update 6)
+#
+ _RELSTR=$($_COM cat $_RLFILE | grep " release " | tail -1)
+ _ADM_SYS_ELTYPE="$(echo "$_RELSTR" | sed -e s/"\(^.*\) release .*"/"\1"/g)"
+ _ADM_SYS_ELMAJOR=$(echo "$_RELSTR" | tail -1 | sed -e s/"^.* release \([0-9]\{1,\}\).*$"/"\1"/g)
+ _RHEL=$(echo $ELTYPE | grep "Red Hat Enterprise")
+ if [ -n "$_RHEL" ]
+ then
+ 		_ADM_SYS_ELMINOR=$(echo "$_RELSTR" | sed -e s/"^.* Update \([0-9]\{1,\}\).*$"/"\1"/gp -n)
+ else
+ 		_ADM_SYS_ELMINOR=$(echo "$_RELSTR" | sed -e s/"^.* release [0-9]\{1,\}\.*\([0-9]\{1,\}\).*$"/"\1"/gp -n)
+ fi
+#
+}
+#
+# Check to see if IP is part of subnet
+#
+# Parameters:
+# 1. IP address
+# 2. Subnet to check against "NW/MASK", eg 172.17.0.0/16
+#
+function _ADM__NET_CheckIP {
+ A="$1"
+ B="$2"
+ _ADM_NET_CheckIP "$A" "$B"
+}
+function _ADM_NET_CheckIP {
+#
+ _ipA="$1"
+ _SNEA="$2"
+#
+_SNRES=$(echo "$_ipA $_SNEA" | awk '{
+			 IP=$1
+			 SNC=$2
+			 NB=substr(SNC,index(SNC,"/")+1)
+			 SN=substr(SNC,1,index(SNC,"/")-1)
+#
+			 NIP=split(IP,IPA,".")
+			 NSN=split(SN,SNA,".")
+			 NBYTES=4
+#
+			 SNM=lshift((2**NB)-1,32-NB)
+			 SNMH=sprintf("%02x",SNM)
+			 BITS8=(2**8)-1
+			 BITS24=(2**24)-1
+#
+			 for (i=1;i<=NBYTES;i++) {
+			  BSHIFT=(NBYTES-i)*8
+#printf "Number bits to shift: %02d\n",BSHIFT
+#printf "SNM: %02x, Shifted %d bits right: %x\n",SNM,BSHIFT,rshift(SNM,BSHIFT)
+			  MASK=BITS8
+#printf "Mask: %02x\n",MASK
+			  #SNMI=and(rshift(SNM,(NBYTES-i)*8),lshift(BITS24,8))
+			  SNMI=and(rshift(SNM,BSHIFT),BITS8)
+			  SNRESI=sprintf("%02x",and(IPA[i],SNMI))
+#printf "SNMI=%02x  SNRESI=%s\n",SNMI,SNRESI
+			  HIPI=sprintf("%02x",IPA[i])
+			  HSNI=sprintf("%02x",SNA[i])
+			  HIP=HIP HIPI
+			  HSN=HSN HSNI
+			  SNRES=SNRES SNRESI
+			 }
+			 #printf "IP: %s\n",HIP
+			 #printf "Subnet: %s\n",HSN
+			 #printf "Subnet Mask: %s\n",SNMH
+			 #printf "IP anded with SNMask: %s\n",SNRES
+			 if ( HSN == SNRES ) {
+			  MESSAGE="IP is part of subnet"
+			 } else {
+			  MESSAGE="IP is not part of subnet"
+			 }
+			 #printf "%s\n",MESSAGE
+			 printf "%s:%s\n",HSN,SNRES
+			}')
+#
+ _HSN=$(echo "$_SNRES" | cut -d ":" -f1)
+ _HSNR=$(echo "$_SNRES" | cut -d ":" -f2)
+ if [ "$_HSN" = "$_HSNR" ]
+ then
+  _ADM_NET_CIP=1
+ else
+  _ADM_NET_CIP=0
+ fi
+}
+#
+# Check network settings for site
+#
+# Parameters:
+# 1. Server name or IP address. If blank then this host
+# 2. UNSET: Determine IP address from login
+#    SET: Do not determine IP address from login
+#
+function _ADM__CheckSite {
+#
+ _SERVER="$1"
+ _LOGIN="$2"
+#
+ if [ "$_SERVER" = "-1" ]
+ then
+  _COM=""
+ else
+  _COM="ssh $_SERVER"
+ fi
+ if [ -z "$_LOGIN" ]
+ then
+  _DOLOGIN=1
+ else
+  _DOLOGIN=0
+ fi
+#
+ _ADM_NET_TMPFILE="/tmp/tmp.adm_net.$$.tmp"
+ if [ $_DOLOGIN -eq 1 ]
+ then
+  $_COM /sbin/ifconfig > $_ADM_NET_TMPFILE
+ else
+  let "_ii=0"
+  for _IPS1 in $_SERVER
+  do
+   echo "eth${_ii}	Link encap" >> $_ADM_NET_TMPFILE
+   echo "	inet addr:${_IPS1}  " >> $_ADM_NET_TMPFILE
+   let "_ii=_ii+_1"
+  done
+ fi
+ _IPSN=""
+ _DEN=""
+ _COMB=""
+ _SITEN=""
+ _DL1=""
+ _DL2=" "
+ _DL="${_DL1}"
+ let "_i=0"
+ while [ $_i -lt $_ADM_NET_NUMIFDESCS ]
+ do
+# for _entry in $_ADM_NET_IFDESCS
+  _entry=${_ADM_NET_IFDESCS[${_i}]}
+  _IF=$(echo $_entry | cut -d ":" -f1)
+  _DE=$(echo $_entry | cut -d ":" -f2)
+  _NM=$(echo $_entry | cut -d ":" -f3)
+#
+  _IPS=$(cat $_ADM_NET_TMPFILE | sed -e /"^${_IF}[0-9]*"/,/"^$"/s/"^.*inet addr:\([0-9.]*\) .*"/"\1"/gp -n | awk '{printf "%s ",$0}')
+  if [ -n "$_IPS" ]
+  then
+   for _ip in $_IPS
+   do
+#
+    _SITEA=""
+    let "_j=0"
+    while [ $_j -lt $_ADM_NET_NUMLANSITES ]
+    do
+#    for _LANT in $_ADM_NET_LANSITES
+     _LANT=${_ADM_NET_LANSITES[${_j}]}
+#
+     _SNE="$(echo $_LANT | cut -d ":" -f1)"
+     _SN="$(echo $_SNE| cut -d "/" -f1)"
+     _SNNB="$(echo $_SNE| cut -d "/" -f2)"
+     _SITE="$(echo $_LANT | cut -d ":" -f2)"
+#
+     _ADM_NET_CheckIP "$_ip" "$_SNE"
+#
+     if [ $_ADM_NET_CIP -eq 1 ]
+     then
+      _SITEA="$_SITE"
+      _SITEN="${_SITEN}${_DL}${_SITEA}"
+     fi
+#
+     let "_j=_j+1"
+#
+    done
+    _DEN="${_DEN}${_DL}${_DE}"
+    _IPSN="${_IPSN}${_DL}${_ip}"
+    _COMB="${_COMB}${_DL}${_ip}:${_DE}:${_SITEA}"
+#
+    if [ "$_DL" = "$_DL1" ]
+    then
+     _DL="${_DL2}"
+    fi
+   done
+  fi
+#
+  let "_i=_i+1"
+ done
+#
+ _ADM_NET_IPS=$(echo $_IPSN)
+ _ADM_NET_DESC=$(echo $_DEN)
+ _ADM_NET_SITES=$(echo $_SITEN)
+ _ADM_NET_INFO=$(echo $_COMB)
+#
+ rm -f $_ADM_NET_TMPFILE
+#
+}
+#
+# Send email
+#
+function _ADM__SendMail {
+#
+ _FROM="$1"
+ _EMAILLISTTO="$2"
+ _EMAILLISTCC="$3"
+ _EMAILLISTBCC="$4"
+ _SUBJECT="$5"
+ _OUTFILE="$6"
+ _SENDEMAIL="$7"
+ _CLEANFILE="$8"
+#
+#
+# Only actually send email if set to do so
+#
+ if [ $_SENDEMAIL -eq 1 ]
+ then
+#
+  _EMAILLISTTO1=$(echo "$_EMAILLISTTO" | sed -e s/"[	 ]"/" "/g -e s/"  *"/","/g -e s/",$"//g)
+  _EMAILLISTCC1=$(echo "$_EMAILLISTCC" | sed -e s/"[	 ]"/" "/g -e s/"  *"/","/g -e s/",$"//g)
+  _EMAILLISTBCC1=$(echo "$_EMAILLISTBCC" | sed -e s/"[	 ]"/" "/g -e s/"  *"/","/g -e s/",$"//g)
+#
+  _OUTFILEH="${_OUTFILE}.header"
+  _OUTFILEALL="${_OUTFILE}.all"
+  > $_OUTFILEH
+  > $_OUTFILEALL
+  _ADM__Log 1 "Sending confirmation email to $_EMAILLISTTO" 1 $SENDEML 1 $VERBOSE 1
+  if [ -n "$_EMAILLISTTO" ]
+  then
+   echo "To: $_EMAILLISTTO1" >> $_OUTFILEH
+  fi
+  if [ -n "$_EMAILLISTCC" ]
+  then
+   echo "CC: $_EMAILLISTCC1" >> $_OUTFILEH
+  fi
+  if [ -n "$_EMAILLISTBCC" ]
+  then
+   echo "BCC: $_EMAILLISTBCC1" >> $_OUTFILEH
+  fi
+  echo "From: $_FROM" >> $_OUTFILEH
+  echo "Subject: $_SUBJECT" >> $_OUTFILEH
+  echo "" >> $_OUTFILEH
+#
+# Add 2 spaces t the mail file so Outlook does not remove line breaks
+#
+  _CLEANF=$(echo $_CLEANFILE | sed -e s/"[	 ]"//g | awk '{printf "%s",toupper(substr($0,1,1))}')
+  case $_CLEANF in
+	1|Y) cat $_OUTFILE | sed -e s/"^"/"  "/ | cat $_OUTFILEH -  > $_OUTFILEALL
+	;;
+	*) cat $_OUTFILEH $_OUTFILE > $_OUTFILEALL
+	;;
+  esac
+#  cat $_OUTFILEH $_OUTFILE > $_OUTFILEALL
+  cat $_OUTFILEALL > $_OUTFILE
+  cat $_OUTFILEALL | $_ADM__SENDMAIL -t
+  rm -f $_OUTFILEH $_OUTFILEALL
+ fi
+#
+}
+#
+# Function to return the location of a network
+#
+function _ADM__GetLocation {
+#
+ _CLOC="$1"
+#
+ _ADM_LOCATION="UNKNOWN"
+ let "_i=0"
+ while [ $_i -le $_ADM_NET_NUMLANSITES ]
+ do
+  _ADM_TEMP="$(echo "${_ADM_NET_LANSITES[${_i}]}" | grep -E ":${_CLOC}:" | cut -d ":" -f4)"
+  if [ -n "$_ADM_TEMP" ]
+  then
+   _ADM_LOCATION=${_ADM_TEMP}
+  fi
+#
+ let "_i=_i+1"
+#
+ done
+}
+#
+# Function to return the server for the site
+#
+function _ADM__GetServer {
+#
+ _CLOC="$1"
+#
+ _ADM_SERVER=""
+ let "_i=0"
+ while [ $_i -le $_ADM_LOC_NUMSITES ]
+ do
+  _ADM_TEMP="$(echo "${_ADM_LOC_SITE[${_i}]}" | grep -E "^${_CLOC}:" | cut -d ":" -f3)"
+  if [ -n "$_ADM_TEMP" ]
+  then
+   _ADM_SERVER=${_ADM_TEMP}
+  fi
+#
+ let "_i=_i+1"
+#
+ done
+}
+#
+# Return df information
+# Argument 1: Filesystem
+# Argument 2: Blocksize (rg 1024=k, equivalent to df -k
+#
+function _ADM__df {
+#
+    _FS="$1"
+    _BS="$2"
+#
+    if [ -z "$_BS" ]
+    then
+        _BLK=""
+    else
+        case $_BS in
+		b|B)
+		    _BLK="-B 1"
+		;;
+		k|K)
+		    _BLK="-B 1024"
+		;;
+		m|M)
+		    let "_size=1024*1024"
+		    _BLK="-B $_size"
+		;;
+		g|G)
+		    let "_size=1024*1024*1024"
+		    _BLK="-B $_size"
+		;;
+		t|T)
+		    let "_size=1024*1024*1024*1024"
+		    _BLK="-B $_size"
+		;;
+		*)
+		    _BLK="-B $_BS"
+		;;
+        esac
+    fi
+#
+#Filesystem         1024-blocks      Used Available Capacity Mounted on
+#/dev/mapper/vg00-root   1269632    285256    918840      24% /
+#
+    _line=$(df -P $_BLK $_FS | tail -n -1)
+    _lined=$(echo "$_line" | sed -e s/"[	 ]"/" "/g -e s/"  *"/"|"/g)
+    _ADM_df_FS=$(echo "${_lined}" | cut -d "|" -f1)
+    _ADM_df_BLK=$(echo "${_lined}" | cut -d "|" -f2)
+    _ADM_df_USED=$(echo "${_lined}" | cut -d "|" -f3)
+    _ADM_df_AVAILABLE=$(echo "${_lined}" | cut -d "|" -f4)
+    _ADM_df_CAPACITY=$(echo "${_lined}" | cut -d "|" -f5)
+    _ADM_df_MOUNTEDON=$(echo "${_lined}" | cut -d "|" -f6)
+#
+#    echo $_ADM_df_FS
+#    echo $_ADM_df_BLK
+#    echo $_ADM_df_USED
+#    echo $_ADM_df_AVAILABLE
+#    echo $_ADM_df_CAPACITY
+#    echo $_ADM_df_MOUNTEDON
+#
+}
+#
+# Convert a number to SI
+# Argument 1: Number
+# Argument 2: SI unit, b, k, m, g, t or capital letters
+#
+function _ADM__ConvertNumber {
+#
+    _NUM="$1"
+    _MULT="$2"
+#
+    case $_MULT in
+	b|B) let "_NUM1=_NUM"
+	;;
+	k|K) let "_NUM1=_NUM/1024"
+	;;
+	m|M) let "_NUM1=_NUM/(1024*1024)"
+	;;
+	g|G) let "_NUM1=_NUM/(1024*1024*1024)"
+	;;
+	t|T) let "_NUM1=_NUM/(1024*1024*1024)"
+	;;
+	*) let "_NUM1=_NUM/(1024*1024*1024)"
+	;;
+    esac
+#
+    let "_ADM_CN_NUM=_NUM1"
+#
+}
+#
+# Convert a number with a multiplier
+# Argument 1: Number with a multipler
+# Argument 2: SI unit, b, k, m, g, t or capital letters
+function _ADM__ConvertNumberMultiplier {
+#
+   volsize="$1 $2 $3"
+   echo "$volsize" | awk '{
+                                SIZE=$1
+                                SHOW=$2
+                                FMT=$3
+				SMULT=1
+				SMULT=1
+#
+                                if ( FMT == "" ) {
+                                    FMT="f"
+                                }
+                                FORM="%" FMT "%s\n"
+#
+				FNN=match(SIZE,"[a-zA-Z]")
+                                lastc=substr(SIZE,FNN,length(SIZE)-FNN+1)
+                                SIZEN=substr(SIZE,1,FNN-1)
+                                if ( FNN == 0 ) {
+				 lastc="B"
+                                 SIZEN=SIZE
+				}
+                                if ( lastc ~ /[Bb]*/ ) {
+                                 SMULT=1
+                                }
+                                if ( lastc ~ /[Kk][Bb]*/ ) {
+                                 SMULT=1024
+                                }
+                                if ( lastc ~ /[Mm][Bb]*/ ) {
+                                 SMULT=1024*1024
+                                }
+                                if ( lastc ~ /[Gg][Bb]*/ ) {
+                                 SMULT=1024*1024*1024
+                                }
+                                if ( lastc ~ /[Tt][Bb]*/ ) {
+                                 SMULT=1024*1024*1024*1024
+                                }
+#
+                                if ( SHOW ~ /[Bb]/ ) {
+                                 HMULT=1
+                                 MULT="B"
+                                }
+                                if ( SHOW ~ /[Kk]/ ) {
+                                 HMULT=1024
+                                 MULT="K"
+                                }
+                                if ( SHOW ~ /[Mm]/ ) {
+                                 HMULT=1024*1024
+                                 MULT="M"
+                                }
+                                if ( SHOW ~ /[Gg]/ ) {
+                                 HMULT=1024*1024*1024
+                                 MULT="G"
+                                }
+                                if ( SHOW ~ /[Tt]/ ) {
+                                 HMULT=1024*1024*1024*1024
+                                 MULT="T"
+                                }
+#
+                                printf FORM,SIZEN*SMULT/HMULT,MULT
+				}'
+#
+}
+#

@@ -1,0 +1,222 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    formatrep			2.3     14 Apr 1998
+#
+# Rob Dancer    Formats correctly, English date	2.4     16 Apr 1998
+#		and sorts on Year, Month, Day
+#		and then time.
+#
+# Rob Dancer    awk changed for $AWK		2.5     11 May 1998
+#
+VERSION="2.5, 11 May 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ if [ -f $TMPFILE1 ]
+ then
+  rm $TMPFILE1
+ fi
+ if [ -f $TMPFILE2 ]
+ then
+  rm $TMPFILE2
+ fi
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+
+#
+# The FILE format is assumed to have come from the ebreport command with
+# the following syntax
+# ebreport history -template gegcfeu1-1_daily -size
+#
+cat $FILE | $AWK 'BEGIN{DATA="FALSE";ROW=0;TITLED="FALSE"}{
+
+		if ($1 == "****" ) {
+		 STR=substr($6,1,index($6,",")-1)
+		}
+
+		if ( DATA == "FALSE" ) {
+		 if ( $1 == "**Item" ){
+		  DATA="TRUE"
+		  IND1=index($2,":")
+		  LEN1=length($2)
+		  COL1=substr($2,IND1+1,(LEN1)-(IND1+1))
+		  SYSTEM=substr($2,2,IND1-1-1)
+		 }
+		} else {
+		 if ( $1 == "" ){
+		  DATA="FALSE"
+		 } else {
+		  if ($1 == "Time" ) {
+		   if ( TITLED != "TRUE" ) {
+		    printf "%s/%s\n",SYSTEM,STR
+		    printf "Item,Date,%s,%s,%s,%s,%s,%s\n",$1,$2,$4,$5,$6,$7
+		    TITLED="TRUE"
+		   }
+		  } else {
+		   if ( $1 ~ /\/$/ ){
+		    DATE=$1"0"$2
+		    FSEP=index(DATE,"/")
+		    MM=substr(DATE,1,FSEP-1)
+		    DD=substr(DATE,FSEP+1,2)
+		    YY=substr(DATE,FSEP+4,2)
+		    TIME=$3
+		    FSEP=index(TIME,":")
+		    HH=substr(TIME,1,FSEP-1)
+		    MI=substr(TIME,FSEP+1,2)
+		    LEVEL=$4
+		    STATUS=$6
+		    ENTRIES=$7
+		    BACKUP=$8
+		    SIZE=$9
+		   } else {
+		    DATE=$1
+		    FSEP=index(DATE,"/")
+		    MM=substr(DATE,1,FSEP-1)
+		    DD=substr(DATE,FSEP+1,2)
+		    YY=substr(DATE,FSEP+4,2)
+		    TIME=$2
+		    FSEP=index(TIME,":")
+		    HH=substr(TIME,1,FSEP-1)
+		    MI=substr(TIME,FSEP+1,2)
+		    LEVEL=$3
+		    STATUS=$5
+		    ENTRIES=$6
+		    BACKUP=$7
+		    SIZE=$8
+		   }
+		   if ( STATUS != "cat_exp" ) {
+		    printf "%s,%2.2d/%2.2d/%2.2d,%2.2d:%2.2d,%s,%s,%s,%s,%s\n",COL1,DD,MM,YY,HH,MI,LEVEL,STATUS,ENTRIES,BACKUP,SIZE
+		   }
+		  }
+		 }
+		}
+
+
+
+}' > $TMPFILE1
+#cat $TMPFILE1 | tail +3 | sort -t "," -k 1.1 -k 2.8n,2.9n -k 2.2n,2.3n -k 2.5n,2.6n > $TMPFILE2
+cat $TMPFILE1 | tail +3 | sort -t "," -n -k 2.7,2.8 -k 2.4,2.5 -k 2.1,2.2 -k 3.1,3.2 -k 3.4,3.5 > $TMPFILE2
+head -2 $TMPFILE1 | cat - $TMPFILE2
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+FILE=""
+TMPFILE1="/tmp/tmpfile1.$$"
+TMPFILE2="/tmp/tmpfile2.$$"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -f file [-V Version]"
+set -- `getopt f:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+ EXITSTAT=1
+_exit $EXITSTAT
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Input file
+#
+	-f)
+		FILE=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of FILE
+#
+if [ -z "$FILE" ]
+then
+ echo "ERROR : Filename required"
+ echo "$USAGE"
+ EXITSTAT=2
+ _exit $EXITSTAT
+else
+ if [ ! -r "$FILE" ]
+ then
+  echo "ERROR : File $FILE does not exist or cannot be opened"
+  EXITSTAT=3
+ _exit $EXITSTAT
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

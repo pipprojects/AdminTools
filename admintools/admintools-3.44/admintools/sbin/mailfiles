@@ -1,0 +1,7 @@
+#!/bin/ksh
+#
+for file in `ls countitemsedm2.log.??????`
+do
+echo "Subject: $file\n" | cat - $file | mail robert.dancer@corporate.ge.com@thomas.ge.com
+done
+#

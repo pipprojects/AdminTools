@@ -1,0 +1,190 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Added headers			2.1     08 Dec 1997
+#
+VERSION="2.1, 08 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+
+awk '{FS=":";file=$1;perms=$2;user=$3;group=$4
+		Type=substr(perms,2,1)
+
+		Perm1=substr(perms,2,3)
+		sub("s","xs",Perm1)
+		sub("S","s",Perm1)
+		gsub("-","",Perm1)
+		PU=Perm1
+
+		Perm1=substr(perms,5,3)
+		sub("s","xs",Perm1)
+		sub("S","s",Perm1)
+		gsub("-","",Perm1)
+		PG=Perm1
+
+		Perm1=substr(perms,8,3)
+		sub("s","xs",Perm1)
+		sub("S","s",Perm1)
+		gsub("-","",Perm1)
+		PO=Perm1
+
+		if ( PU == "" ) {
+		 if ( PG == "" ) {
+		  if ( PO == "" ) {
+#		- - -
+		   PPerms="ugo="
+		  }
+		  else {
+#		- - A
+		   PPerms="o="PO",""ug="
+		  }
+		 }
+		 else {
+		  if ( PO == "" ) {
+#		- A -
+		   PPerms="g="PG",""ou="
+		  }
+		  else {
+#		- A A
+		   PPerms="g="PG",""o="PO",""u="
+		  }
+		 }
+		}
+		else {
+		 if ( PG == "" ) {
+		  if ( PO == "" ) {
+#		A - -
+		   PPerms="u="PU",""go="
+		  }
+		  else {
+#		A - A
+		   PPerms="u="PU",""o="PO",""g="
+		  }
+		 }
+		 else {
+		  if ( PO == "" ) {
+#		A A -
+		   PPerms="u="PU",""g="PG",""o="
+		  }
+		  else {
+#		A A A
+		   PPerms="u="PU",""g="PG",""o="PO
+		  }
+		 }
+		}
+
+
+		printf "%s %s %s:%s\n", file,PPerms,user,group
+
+}' $FILE
+
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+FILE=""
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -f filename [-V Version]"
+set -- `getopt f:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Option
+#
+	-f)
+		FILE=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+if [ "$SHOWVERSION" != "TRUE" ]
+then
+#
+# Check bounds of FILE
+#
+ if [ -z "$FILE" ]
+ then
+  echo "ERROR : Invalid filename - $FILE"
+  SHOWVERSION="TRUE"
+ fi
+
+fi
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

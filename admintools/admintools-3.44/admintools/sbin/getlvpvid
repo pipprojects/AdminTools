@@ -1,0 +1,22 @@
+#!/bin/ksh
+#
+
+echo "#LVPV_ID,LVID,DISKID,LVSIZEMB"
+echo "#=======,====,======,========"
+#
+let "lvpv_id=100000"
+for lv in `cat iolv.db | grep -v "^#" | awk -F "," '{print $2}'`
+do
+ lvid=`cat iolv.db | awk -F "," '{if ($2 == "'"$lv"'" ) print $1}'`
+ disks=`lvdisplay -v $lv | awk '{print $1}' | grep "/dev/dsk"`
+ for disk in $disks
+ do
+  PESIZE=`pvdisplay $disk | grep "PE Size" | awk '{print $4}'`
+  NUMPE=`pvdisplay -v $disk | awk '{if ($1 == "'"$lv"'" )print $3}'`
+  let "LVSIZE=PESIZE*NUMPE"
+  diskid=`cat iodsk.db | awk -F "," '{if ($2 == "'"$disk"'" ) print $1}'`
+  let "lvpv_id=lvpv_id+1"
+  echo "$lvpv_id,$lvid,$diskid,$LVSIZE"
+ done
+done
+

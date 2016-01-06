@@ -1,0 +1,169 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Added versions			1.2     17 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Change host to admtlssrv	2.1     01 Mar 1999
+#
+# Rob Dancer    Check host type			2.2     13 Sep 1999
+#
+VERSION="2.2, 13 Sep 1999"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ DIRROOT="opt/admintools"
+ DIRLIST="sbin|bin|etc"
+
+ echo
+ echo "Copyfiles"
+ echo
+ echo "Copying from $HOST to `hostname`"
+ echo
+ LIST="[${DIRLIST}[/file(s)]"
+ SOURCE="/opt/admintools_setup/HP10.X"
+#
+ echo "Enter directory/file(s) to copy from :"
+ echo "     ${SOURCE}/${DIRROOT} ($LIST)"
+ read DIR
+ DIRREMOTE="${DIRROOT}/"`echo $DIR | strings -n 1`
+#
+ echo
+ echo "Getting $DIRREMOTE"
+ echo
+#
+ cd /
+ remsh $HOST "cd $SOURCE; tar cf - ${DIRREMOTE}" | tar xvf -
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+HOST="admtlssrv"
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-h hostname] [-V Version]"
+set -- `getopt h:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Hostname of setup server
+#
+	-h)
+		HOST=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Check bounds of OPTION
+#
+if [ -z "$HOST" ]
+then
+ echo "ERROR : Invalid host - $HOST"
+ _exit 1
+else
+ echo "Attempting communication with $HOST"
+ if [ $HOSTTYPE = "HP" ]
+ then
+  ping $HOST -n 1
+  RES=$?
+ else
+  ping $HOST
+  RES=$?
+ fi
+ if [ $RES -ne 0 ]
+ then
+  echo "ERROR : Host down or unknown"
+  _exit 3
+ fi
+ echo "Host $HOST is responding"
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

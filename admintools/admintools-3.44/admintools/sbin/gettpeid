@@ -1,0 +1,51 @@
+#!/bin/ksh
+#
+
+#
+echo "#TAPE_ID,TAPE,HWID"
+echo "#=======,====,====="
+#
+let "tape_id=1000"
+case $HPUXVER in
+	10)
+		TAPECLASS="tape"
+	;;
+	09)
+		TAPECLASS="tape_drive"
+	;;
+	*)
+		echo "ERROR : HPUXVER not set"
+		exit 1
+	;;
+esac
+for tape in `ioscan -fnkC${TAPECLASS} | grep "/dev/rmt" | awk '{for (i=1;i<=NF;i++){print $i"\n"}}'`
+do
+ hw=`lssf $tape | awk '{print $(NF-1)}'`
+ if [ "$hw" != "???" -a -n "$hw" ]
+ then
+  case $HPUXVER in
+	10)
+		hwC=`echo $hw | sed -e s@"\/"@"\\\\\/"@g -e s@"\."@"\\\\\."@g`
+		hwid=`cat iotape.db | awk -F "," '{if ($2 ~ /^'"$hwC"'$/ )print $1}'`
+	;;
+	09)
+		hwC=`echo $hw | sed -e s@"\/"@"\\\\\/"@g -e s@"\."@"\\\\\."@g`
+		hwid=`cat iotape_drive.db | awk -F "," '{if ($2 ~ /^'"$hwC"'$/ )print $1}'`
+		if [ -z "$hwid" ]
+		then
+		 hwC=`echo $hw | sed -e s@"\."@"\/"@ -e s@"\/"@"\\\\\/"@g -e s@"\."@"\\\\\."@g`
+		 hwid=`cat iotape_drive.db | awk -F "," '{if ($2 ~ /^'"$hwC"'$/ )print $1}'`
+		fi
+	;;
+	*)
+		echo "ERROR : HPUXVER not set"
+		exit 1
+	;;
+  esac
+#
+  let "tape_id=tape_id+1"
+  echo "$tape_id,$tape,$hwid"
+  hw_pre=$hw
+ fi
+done
+

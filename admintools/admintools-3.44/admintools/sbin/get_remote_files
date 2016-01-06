@@ -1,0 +1,194 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    change_perms			2.3     12 Jan 1998
+#
+# Rob Dancer    Allow "-" to be specified as	2.4     13 Jan 1998
+#		input file
+#
+VERSION="2.4, 13 Jan 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#for file in `cat $FILE | grep -v "^#" | get_perms -f - | awk -v VERB=$VERBOSE -v ROOT=${ROOT} '{
+#			 File=$1
+#			 file=ROOT"/"File
+#			 if ( VERB == "-v" ) {
+#			  printf "%s %s %s\n",file,$2,$3
+#			 };
+#			 if 
+#			 system("mkdir " file)
+#			 system("chmod " $2 " " file)
+#			 system("chown " $3 " " file)
+#			}'
+NUM="$(cat $FILE | wc -l)"
+i=1
+echo "FILE=$FILE"
+echo "NUM=$NUM"
+while [ $i -le $NUM ]
+do
+ line="$(cat $FILE | sed -e ${i}p -n)"
+ FNAME="${ROOT}/$(echo $line | awk '{print $1}')"
+ CHMODP="$(echo $line | awk '{print $2}')"
+ CHOWNP="$(echo $line | awk '{print $3}')"
+ if [ "$VERBOSE" = "-v" ]
+ then
+  echo $line
+ fi
+ if [ ! -d $FNAME ]
+ then
+  echo "mkdir $FNAME"
+  mkdir $FNAME
+  echo "chmod $CHMODP $FNAME"
+  chmod $CHMODP $FNAME
+  echo "chown $CHOWNP $FNAME"
+  chown $CHOWNP $FNAME
+ else
+  echo "WARNING : Directory $FNAME already exists"
+ fi
+ let "i=i+1"
+done
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+FILE=""
+ROOT=""
+VERBOSE=""
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -f filename [-r root] [-v] [-V Version]"
+set -- `getopt f:r:vV $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# File
+#
+	-f)
+		FILE=$2
+		shift 2
+	;;
+#
+# Root
+#
+	-r)
+		ROOT=$2
+		shift 2
+	;;
+#
+# Verbose
+#
+	-v)
+		VERBOSE="-v"
+		shift 1
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check directory exists
+#
+if [ -z "${ROOT}" ]
+then
+ ROOT="."
+fi
+#
+if [ ! -r "${ROOT}" ]
+then
+ echo "ERROR : Root directory ${ROOT} does not exist"
+ _exit 10
+fi
+#
+# Check file exists
+#
+if [ ${FILE} != "-" ]
+then
+ if [ ! -r "${FILE}" ]
+ then
+  echo "ERROR : ${FILE} does not exist"
+  _exit 11
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

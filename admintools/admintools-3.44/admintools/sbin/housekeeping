@@ -1,0 +1,152 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Added housekeeping commands	2.1     10 Dec 1997
+#
+# Rob Dancer    Remove old files in		2.2	14 Jan 1998
+#		/var/adm/admintools
+#
+VERSION="2.2, 14 Jan 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#
+# Clean up /tmp
+#
+for directory in /tmp /var/tmp
+do
+ find $directory -mtime +${MODTIME1} -exec rm {} \; 2> /dev/null
+done
+#
+# Compress /var/adm/admintools
+#
+find /var/adm/admintools -mtime +${MODTIME2} -name "*[!Z]" -exec compress -f {} \;
+#
+# Remove old files in /var/adm/admintools
+#
+find /var/adm/admintools -mtime +${MODTIME3} -name "*.Z" -exec rm -f {} \;
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+#
+# File access modification time
+#
+MODTIME="7"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-d days_old] [-V Version]"
+set -- `getopt d:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Option
+#
+	-d)
+		MODTIME=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Check bounds of MODTIME
+#
+MT="FALSE"
+if [ -n "$MODTIME" ]
+then
+ MODTIMEN=`echo $MODTIME | awk '{print int($1)}'`
+ if [ $MODTIMEN -gt 0 -a $MODTIMEN -le 30 ]
+ then
+  MT="TRUE"
+ fi
+fi
+if [ "$MT" = "FALSE" ]
+then
+ echo "ERROR : Invalid file modification time - $MODTIME"
+ _exit 1
+else
+ MODTIME=$MODTIMEN
+fi
+#
+# Calculate all 3 mod. time
+#
+let "MODTIME1=MODTIME"
+let "MODTIME2=MODTIME"
+let "MODTIME3=MODTIME*4"
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

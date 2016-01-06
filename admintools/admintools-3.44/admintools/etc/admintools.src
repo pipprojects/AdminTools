@@ -1,0 +1,135 @@
+#
+#*****************************************************************************
+#
+# This file should be sourced to get definitions for admin scripts
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version                 1.0     13 Oct 1997
+#
+# Rob Dancer    Changed LOGDIR and TMPDIR       2.0     01 Dec 1997
+#
+# Rob Dancer    Cleaned up comments		2.1     10 Dec 1997
+#
+# Rob Dancer    Made awk a variable so "awk" or	2.2     16 Apr 1998
+#		"nawk" can be selected
+#
+# Rob Dancer    awk variable modified		2.3     28 Apr 1998
+#
+# Rob Dancer    Made Borne shell compatible	2.4     14 Sep 1999
+#
+# Rob Dancer    Change for Linux                2.5     08 July 2002
+#
+# Rob Dancer	Change admintools variables	2.6	22 June 2006
+#
+# Rob Dancer	2.7	3 March 2008
+# Add ADM_NET and source /etc/sysconfig/admfunctions.src
+#
+#*****************************************************************************
+#
+# Set the system type
+#
+RES="`uname -s`"
+if [ $RES = "HP-UX" ]
+then
+ HOSTTYPE="HP"
+elif [ $RES = "SunOS" ]
+then
+ HOSTTYPE="SUN"
+elif [ $RES = "Linux" ]
+then
+ HOSTTYPE="LINUX"
+else
+ HOSTTYPE="OTHER"
+fi
+#
+# Set AWK variable
+#
+AWK="awk"
+if [ -x /usr/bin/nawk ]
+then
+ AWK="/usr/bin/nawk"
+ export AWK
+elif [ -x /usr/bin/awk ]
+then
+ AWK="/usr/bin/awk"
+ export AWK
+fi
+#
+# What the directory should be called (can be customised) and where it
+# should be
+#
+DIRECTORY="admintools"
+ABSDIR="/opt/${DIRECTORY}"
+#DIRECTORY="local"
+#ABSDIR="/usr/${DIRECTORY}"
+#
+# The users' bin directory
+#
+ADMINTOOLSBIN=${ABSDIR}/bin
+export ADMINTOOLSBIN
+#
+# The users'/system etc directory
+#
+ADMINTOOLSETC=${ABSDIR}/etc
+export ADMINTOOLSETC
+#
+# The system bin directory
+#
+ADMINTOOLSSBIN=${ABSDIR}/sbin
+export ADMINTOOLSSBIN
+#
+# The users'/system log directory
+#
+if [ $HOSTTYPE = "LINUX" ]
+then
+ ADMINTOOLSLOGS=/var/log/${DIRECTORY}
+else
+ ADMINTOOLSLOGS=/var/adm/${DIRECTORY}
+fi
+export ADMINTOOLSLOG
+if [ ! -d $ADMINTOOLSLOGS ]
+then
+ mkdir -p $ADMINTOOLSLOGS
+fi
+#
+# Now set up the path
+#
+PATH="$PATH:${ADMINTOOLSSBIN}:${ADMINTOOLSBIN}"
+if [ "$UID" -eq 0 ]
+then
+ PATH="${PATH}:/usr/sbin:/sbin"
+fi
+export PATH
+#
+# And aliases to get to these directories if required
+#
+alias abin="cd ${ADMINTOOLSBIN}"
+alias asbin="cd ${ADMINTOOLSSBIN}"
+alias aetc="cd ${ADMINTOOLSETC}"
+alias alogs="cd ${ADMINTOOLSLOGS}"
+#
+# Set Program defaults
+#
+export PROGNAME=$(basename $0)
+export CPID=$$
+export ATLOGDIR="${HOME}/.admintools"
+export EMAILLOGFILE="${ATLOGDIR}/${PROGNAME}.${CPID}.email.log"
+export APPLOGFILE="${ATLOGDIR}/${PROGNAME}.log"
+mkdir -p $ATLOGDIR
+#
+_ADM_NET_NUMLANSITES=3
+_ADM_NET_LANSITES[0]="192.168.1.0/24:SITE1:Site 1"
+_ADM_NET_LANSITES[1]="172.16.0/16:SITE2:Site 2"
+_ADM_NET_LANSITES[2]="10.0.0.0/8:SITE3:Site 3"
+_ADM_NET_NUMIFIDDESCS=3
+_ADM_NET_IFIDDESCS[0]="eth:AN:1:Ethernet"
+_ADM_NET_IFIDDESCS[1]="br:VPNS:2:Bridge"
+_ADM_NET_IFIDDESCS[2]="tap:VPNC:3:TAP"
+if [ -e /etc/sysconfig/admtools.src ]
+then
+ . /etc/sysconfig/admtools.src
+fi
+#

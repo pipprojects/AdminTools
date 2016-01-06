@@ -1,0 +1,11 @@
+bc
+disk
+ext_bus
+lan
+lanmux
+memory
+processor
+tape
+target
+tty
+unknown

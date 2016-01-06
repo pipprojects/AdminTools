@@ -1,0 +1,199 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add options with "-"params.	2.3     15 Jan 1998
+#
+VERSION="2.3, 15 Jan 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+DUMMYFILE="/tmp/FILE.DIST.$$"
+
+for entry in `cat $FILE | grep -v "^#"`
+do
+ echo $entry
+ Type=`echo $entry | awk -F ":" '{print substr($2,1,1)}'`
+ file_source=`echo $entry | awk -F ":" '{print $5}'`
+ if [ -z "$file_source" ]
+ then
+  file_source=`echo $entry | awk -F ":" '{print $1}'`
+ fi
+ file_destination=`echo $entry | awk -F ":" '{print $1}'`
+
+ if [ "$Type" = "d" ]
+ then
+  remsh $Client "mkdir ${Root}/${file_destination}" > /dev/null 2>&1
+ else
+  rcp ${Master}:${Source}/${file_source} $DUMMYFILE
+  rcp $DUMMYFILE ${Client}:${Root}/${file_destination}
+ fi
+
+ remsh $Client ". /etc/admintools.src; echo $entry | change_perms -f - -r $Root -v"
+
+done
+
+rm $DUMMYFILE
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+FILE=""
+Master=""
+Client=""
+Source=""
+Root=""
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -f file -m masterhost -c clienthost -s sourcedir -r rootdir [-V Version]"
+set -- `getopt f:m:c:s:r:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# File to copy
+#
+	-f)
+		FILE=$2
+		shift 2
+	;;
+#
+# Master host
+#
+	-m)
+		Master=$2
+		shift 2
+	;;
+#
+# Client host
+#
+	-c)
+		Client=$2
+		shift 2
+	;;
+#
+# Source directory
+#
+	-s)
+		Source=$2
+		shift 2
+	;;
+#
+# Root directory
+#
+	-r)
+		Root=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check options
+#
+if [ -z "$FILE" ]
+then
+ echo "ERROR : No file specified"
+ _exit 10
+fi
+if [ -z "$Master" ]
+then
+ echo "ERROR : No master host specified"
+ _exit 11
+fi
+if [ -z "$Client" ]
+then
+ echo "ERROR : No client host specified"
+ _exit 12
+fi
+if [ -z "$Source" ]
+then
+ echo "ERROR : No source directory specified"
+ _exit 13
+fi
+if [ -z "$Root" ]
+then
+ echo "ERROR : No root directory specified"
+ _exit 14
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

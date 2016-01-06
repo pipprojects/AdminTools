@@ -1,0 +1,111 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Rob Dancer	Put header fileds in	2.4	08 July 2002
+#
+VERSION="3.0, 08 JUly 2002"
+#
+#*****************************************************************************
+
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ bdf.ksh | awk '{print $6":'"${MAXPCFULL}"'%"}' | tail +2
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up percentages
+#
+MINFULL="0"
+MAXFULL="110"
+MAXPCFULL="90"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-m max_%_full] [-V Version]"
+while getopts m:V OPT
+do
+ case $OPT in
+#
+# Invalid optin
+#
+	\?)
+		if [ -z "$OPTARG" ]
+		then
+		 echo $USAGE
+		 _exit 2
+		fi
+	;;
+#
+# Maximum percentage full
+#
+        m)
+		MAXPCFULL=$OPTARG
+        ;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of MAXPCFULL
+#
+if [ -z "$MAXPCFULL" ]
+then
+ echo "ERROR : Invalid option - MAXPCFULL"
+ _exit 1
+else
+ VALUE=`echo $MAXPCFULL | awk '{print int($1)}'`
+ if [ "$VALUE" -gt "$MINFULL" -a "$VALUE" -le "$MAXFULL" ]
+ then
+  MAXPCFULL=$VALUE
+ else
+  echo "ERROR : Invalid value for maximum % full - $MAXPCFULL"
+  _exit 3
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

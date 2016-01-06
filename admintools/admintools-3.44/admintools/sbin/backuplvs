@@ -1,0 +1,705 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# This script uses a graph file of the same format as that used by fbackup
+# to backup COMPLETE filesystems on logical volumes and other mounted
+# volumes.
+#
+# Sub-mounted directories of mirrored volumes will only be backed up if
+# EXPLICITLY specified in the graph file.
+#
+# However, sub-mounted directories of non-mirrored volumes will be backed up
+# if NOT EXPLICITLY supplied.
+#
+# For this reason, the graph file should contain ALL the logical volumes of
+# a bdf (/etc/mnttab) and the volumes should be explicitly included or
+# excluded. This will ensure that filesystems will be backed up only if
+# specified.
+#
+# Also, the /etc/mnttab is read to see if all mounted filesystems are
+# referenced in the backup graph file. If they are not, then they are
+# excluded from the backup. This ensures that if there are previously
+# split mirrors and they are mounted, then they are not backed up.
+#
+# Non-mirrored filesystems are mounted as NFS not LOFS as there are
+# issues with fbackup and relative pathname exclusions. The /etc/exports
+# file needs to have all the relevant mounted filesystem paths in it for
+# the local system to mount its filesystems as nfs, eg
+# /	-access=rotary,root=rotary
+#
+#*****************************************************************************
+#
+# Name		Description			Version	Date
+#
+# Rob Dancer	Initial version			1.0	13 Oct 1997
+#
+# Rob Dancer	Include .src file for file	1.1	13 Oct 1997
+#		definitions.
+#
+# Rob Dancer	Add -g and -m options		1.2	13 Oct 1997
+#
+# Rob Dancer	Exclude "e"s from backup graph	1.3	14 Oct 1997
+#		if not mounted
+#
+# Rob Dancer	Do not use graph file as this	1.4	17 Oct 1997
+#		slows down the backup and
+#		produces an unecessary dates
+#		file. Use -i and/or -e on
+#		command line instead.
+#
+# Rob Dancer	Add -V option for frecover	1.5	11 Nov 1997
+#
+# Rob Dancer	Changed -V for -N and made -V	1.6	17 Nov 1997
+#		into the option to list the
+#		version number
+#
+# Rob Dancer	If dir not LV then warn and do	1.7	25 Nov 1997
+#		not exit. Changed wording so
+#		other types of mounted volumes
+#		can be considered for backup and
+#		mounted as a local filesystem.
+#
+# Rob Dancer	References amended to		2.0	01 Dec 1997
+#		"admintools"
+#
+# Rob Dancer	Changed permissions on mkdir -p	2.1	08 Dec 1997
+#		so that umask is irrelevent
+#
+# Rob Dancer	Put check for backup graph	2.2	09 Dec 1997
+#		in "create" block
+#
+# Rob Dancer	Add a lvlnboot -R after split	2.3	19 Dec 1997
+#		and merge
+#
+# Rob Dancer	Exclude MIRDIR from backuplist	2.4	26 Feb 1999
+#
+# Rob Dancer	Change rmdir/mkdir		2.5	01 Mar 1999
+#
+# Rob Dancer	Add TIMEHOST			2.6	01 Mar 1999
+#
+# Rob Dancer	Make non-mirror nfs not lofs	2.7	01 Mar 1999
+#		Need to add entries in
+#		/etc/exports if this is the
+#		case
+#
+# Rob Dancer	Debugging			2.8	01 Mar 1999
+#
+# Rob Dancer	Text added			2.9	02 Mar 1999
+#
+# Rob Dancer	Cleaned up rmdir		3.0	09 Mar 1999
+#
+# Rob Dancer	mkdir propbelm			3.1	15 Mark 1999
+#
+VERSION="3.1, 15 Mar 1999"
+#
+#*****************************************************************************
+#
+# Define DATESTAMP
+#
+DATESTAMP="`date +'%d_%h_%Y_%H:%M:%S'`"
+#
+# Program starts at "Starts here"
+#
+
+function _exit
+{
+ exit $1
+}
+#
+# Create the mounted directories and graph file
+#
+function _createGraphFile
+{
+ > $LVLISTFILE
+ > $LVMIRLISTFILE
+ > $MNTDIRLISTFILE
+ echo "**Getting backup information"
+ LVLIST=""
+ cat $GRAPH1 > $GRAPH2
+#
+# Check for fs mounted at $MIRDIR
+#
+ for fs in `cat /etc/mnttab | awk '{print $2}'`
+ do
+  ROOTDIR="/`echo $fs | cut -d "/" -f2`"
+  if [ "$ROOTDIR" = "${MIRDIR}" ]
+  then
+   if [ "$UNMOUNTDIRS" = "y" ]
+   then
+    echo "WARNING : Unmounting directories at $MIRDIR - These may be mirrors that may need re-mirroring"
+    umountmir -m $MIRDIR
+    sleep 1
+   fi
+   break
+  fi
+ done
+#
+# Check that directories have been unmounted
+#
+ EXIT="FALSE"
+ for fs in `cat /etc/mnttab | awk '{print $2}'`
+ do
+  ROOTDIR="/`echo $fs | cut -d "/" -f2`"
+  if [ "$ROOTDIR" = "${MIRDIR}" ]
+  then
+   echo "ERROR : Mounted directory at $ROOTDIR"
+   EXIT="TRUE"
+  fi
+ done
+ if [ "$EXIT" = "TRUE" ]
+ then
+  _exit 10
+ fi
+#
+# Exclude those fs not specified in graph file but may be mounted
+#
+ for fs in `cat /etc/mnttab | awk '{print $2}'`
+ do
+#
+  FSREC="FALSE"
+  for fsg in `cat $GRAPH1 | awk '{print $2}' | sort`
+  do
+   if [ $fsg = $fs ]
+   then
+    FSREC="TRUE"
+   fi
+  done
+  if [ $FSREC = "FALSE" ]
+  then
+   echo "e $fs" >> $GRAPH2
+  fi
+ done
+#
+# Read graph file (contains includes and excludes of backup)
+#
+ for line in `cat $GRAPH2 | awk '{print $1":"$2}' | sort -t ":" -k 2,2 -u`
+ do
+  DIR=`echo $line | cut -d ":" -f2`
+  GR=`echo $line | cut -d ":" -f1`
+  LV=`cat /etc/mnttab | awk -v DIR=${DIR} '{if ( $2 == DIR) print $1}'`
+#
+# Filesystems in graph file must be mount points of logical volumes
+# (hfs or vxfs or nfs)
+#
+  if [ -z "$LV" ]
+  then
+   echo "WARNING : $DIR is not a mounted volume - entry ignored"
+  else
+   FSTYPE=`cat /etc/mnttab | awk -v DIR=${DIR} '{if ( $2 == DIR) print $3}'`
+   echo "${LV}:${DIR}:${FSTYPE}:${GR}" >> $LVLISTFILE
+  fi
+ done
+#
+#
+#
+ > $GTMP1
+ echo "**Making root mirrored mount point - $MIRDIR"
+ if [ ! -d ${MIRDIR} ]
+ then
+  mkdir -p ${MIRDIR}
+ fi
+ echo "**Changing permissions on mount point"
+ PERMS=`ls -ald / | awk '{print $9":"$1":"$3":"$4}' | get_perms -f - | awk '{print $2}'`
+ OWNERS=`ls -ald / | awk '{print $9":"$1":"$3":"$4}' | get_perms -f - | awk '{print $3}'`
+ chmod $PERMS $MIRDIR
+ chown $OWNERS $MIRDIR
+#
+# Loop round entries in graph file
+#
+ for LVDIR in `cat $LVLISTFILE`
+ do
+  LV=`echo $LVDIR | cut -d ":" -f1`
+  DIR=`echo $LVDIR | cut -d ":" -f2`
+  FSTYPE=`echo $LVDIR | cut -d ":" -f3`
+  GR=`echo $LVDIR | cut -d ":" -f4`
+#
+# For includes
+#
+  if [ "$GR" = "i" ]
+  then
+#
+# Generate mount directory without trailing "/"
+#
+   MNTDIR=`echo ${MIRDIR}${DIR} | sed -e s@"/$"@""@`
+   if [ ! -d "$MNTDIR" ]
+   then
+#
+# Create directories as needed
+#
+    dircomp=""
+    for dir in `echo $MNTDIR | sed -e s@"/"@" "@g`
+    do
+     dircomp="${dircomp}/${dir}"
+     if [ ! -d "$dircomp" ]
+     then
+      echo "mkdir $dircomp"
+      mkdir $dircomp
+      echo $dircomp >> $MNTDIRLISTFILE
+     fi
+    done
+#
+# Make sure the permissions and owners are right
+#
+    CURDIR=$PWD
+    cd $MIRDIR
+    DIRCHECK=""
+    MDCHECK=$MIRDIR
+    for dir in `echo $DIR | sed -e s@"\/"@" "@g`
+    do
+     DIRCHECK="${DIRCHECK}/${dir}"
+     MDCHECK="${MDCHECK}/${dir}"
+     PERMS=`ls -ald $DIRCHECK | awk '{print $9":"$1":"$3":"$4}' | get_perms -f - | awk '{print $2}'`
+     OWNERS=`ls -ald $DIRCHECK | awk '{print $9":"$1":"$3":"$4}' | get_perms -f - | awk '{print $3}'`
+     MDPERMS=`ls -ald $MDCHECK | awk '{print $9":"$1":"$3":"$4}' | get_perms -f - | awk '{print $2}'`
+     MDOWNERS=`ls -ald $MDCHECK | awk '{print $9":"$1":"$3":"$4}' | get_perms -f - | awk '{print $3}'`
+     if [ "$MDPERMS" != "$PERMS" ]
+     then
+      chmod $PERMS $MDCHECK
+     fi
+     if [ "$MDOWNERS" != "$OWNERS" ]
+     then
+      chown $OWNERS $MDCHECK
+     fi
+    done
+    cd $CURDIR
+   fi
+#
+# Get number of mirror copies
+#
+   NUMMIR=`lvdisplay $LV | grep "Mirror copies" | awk '{print $3}'`
+#
+# If logical volume is mirrored
+#
+   if [ $NUMMIR -gt 0 ]
+   then
+    echo "**Splitting mirror $LV"
+    lvsplit $LV
+    lvlnboot -R
+    fsck -F ${FSTYPE} ${LV}b
+    echo "**Mounting ${LV}b on $MNTDIR"
+    mount -F ${FSTYPE} ${LV}b $MNTDIR
+    echo "${LV}b:${MNTDIR}:${FSTYPE}" >> $LVMIRLISTFILE
+   else
+#
+# Logical volume is not mirrored
+#
+    echo "**$LV not mirrored"
+#    FSTYPE="lofs"
+    FSTYPE="nfs"
+    echo "**Mounting ${DIR} on $MNTDIR"
+#    mount -F ${FSTYPE} ${DIR} $MNTDIR
+    mount -F ${FSTYPE} `hostname`:${DIR} $MNTDIR
+    echo "${DIR}:${MNTDIR}:${FSTYPE}" >> $LVMIRLISTFILE
+   fi
+  fi
+#
+# Order the new backup graph under the mountpoint
+#
+  echo "**Sorting backup graph"
+#
+# Remove "/" from begining and end of directory name
+#
+  DIR1=`echo $DIR | sed -e s@"^\/"@""@ -e s@"\/$"@""@`
+#
+# See if there are any other filesystems mounted below current fs and
+# order appropriately. This means  making sure that the parent directory
+# is mounted first
+#
+  for line in `cat $GRAPH2 | awk '{print $1":"$2}'`
+  do
+   GR=`echo $line | cut -d ":" -f1`
+#
+# Add "/" at beginning and end of graph directory name to pattern match
+# mounted filesystems only and not part names.
+# For example, match /home/configs with /home/configs/hosts but not with
+# /home/configs.old
+#
+   DIRM=`echo $line | cut -d ":" -f2 | sed -e s@"^\/"@""@ -e s@"\/$"@""@ -e s@"^"@"/"@ -e s@"$"@"/"@`
+   line1="$GR:$DIRM"
+   echo $line1 | awk -F ":" '{if ($2 ~ "/'"${DIR1}"'?/") printf "%s .%s\n",$1,$2}' | sed -e s@"/$"@""@ >> $GTMP1
+#
+#
+  done
+#
+ done
+#
+# Order on backup directories and remove double entries
+#
+ sort -t " " -k 2,2 -u $GTMP1 > $GTMP2
+#
+# Make sure that if a directory to exclude is not mounted, then do
+# not include it in the backup graph
+#
+ > $GRAPHFILE
+ for line in `cat $GTMP2 | awk '{print $1":"$2}'`
+ do
+  IE=`echo $line | cut -d ":" -f1`
+  BDIR=`echo $line | cut -d ":" -f2`
+  if [ -r "${MIRDIR}/${BDIR}" ]
+  then
+   echo "${IE} ${BDIR}" >> $GRAPHFILE
+  fi
+ done
+#
+# Calculate total number of MegaBytes to backup
+#
+ mbbgraph -g $GRAPHFILE -r $MIRDIR 
+}
+#
+# Do the backup
+#
+function _doBackup
+{
+ CURDIR=$PWD
+ cd $MIRDIR
+ echo "**Backing up filesystems"
+#
+# Do not use graph file option "-g" as this will slow down backup
+#
+ GRAPHLIST="`cat $GRAPHFILE | awk '{print "-"$1 $2}'`"
+#
+# This is for Y2K Testing
+#
+ echo "Date Today : \c"
+ telnet $TIMEHOST daytime 2>/dev/null | tail -1
+#
+# Check for local mirrored directory
+#
+ if [ -d ".${MIRDIR}" ]
+ then
+  EMIRDIR="-e.${MIRDIR}"
+ else
+  EMIRDIR=""
+ fi
+#
+# echo "fbackup -f $TAPEDEVICE -I $BACKUPINDEX -v -0 -l $GRAPHLIST -e.${MIRDIR}"
+# fbackup -f $TAPEDEVICE -I $BACKUPINDEX -v -0 -l $GRAPHLIST -e.${MIRDIR}
+ echo "fbackup -f $TAPEDEVICE -I $BACKUPINDEX -v -0 -l -n $GRAPHLIST $EMIRDIR"
+ fbackup -f $TAPEDEVICE -I $BACKUPINDEX -v -0 -l -n $GRAPHLIST $EMIRDIR
+#
+ if [ $? -eq 0 ]
+ then
+  RETSTAT=0
+  echo "**fbackup completed successfully"
+  if [ "$VERIFY" = "TRUE" ]
+  then
+   echo "**Verifying"
+   frecover -x -N -f $TAPEDEVICE
+   if [ $? -eq 0 ]
+   then
+    echo "**frecover completed successfully"
+   else
+    echo "**ERROR : frecover problem"
+    RETSTAT=2
+   fi
+  fi
+ else
+  echo "**ERROR : Problem with fbackup"
+  RETSTAT=1
+ fi
+ cd $CURDIR
+}
+#
+# Unmount filesystems and merge mirrors
+#
+function _restoreMirrors
+{
+ echo "**Unmounting mirrored filesystems"
+ for LVDIR in `cat $LVMIRLISTFILE | sort -t ":" -k 2r,2`
+ do
+#
+# Get components of mounted filesystems
+#
+  LV=`echo $LVDIR | cut -d ":" -f1`
+  MNTDIR=`echo $LVDIR | cut -d ":" -f2`
+  FSTYPE=`echo $LVDIR | cut -d ":" -f3`
+#
+# Unmount directory
+#
+  umount $MNTDIR
+ done
+#
+# Remove mirror directories
+#
+ CURDIR=$PWD
+ cd $MIRDIR
+ if [ "$PWD" = "$MIRDIR" ]
+ then
+#  find $MIRDIR -type d | grep -v "^${PWD}$" | sort -t "/" -r | xargs -i rmdir {} ;
+  FILE=$MNTDIRLISTFILE
+  NUM=`cat $FILE | wc -l`
+  i=$NUM
+  while [ $i -ge 1 ]
+  do
+   dir="$(sed -e ${i}p -n $FILE)"
+   echo "rmdir $dir"
+   rmdir $dir
+   let "i=i-1"
+  done
+ else
+  echo "ERROR : Cannot change directory to $MIRDIR"
+  _exit 3
+ fi
+ cd $CURDIR
+#
+# Now remove mirror mount
+#
+ if [ -d ${MIRDIR} ]
+ then
+  echo "rmdir ${MIRDIR}"
+  rmdir ${MIRDIR}
+ fi
+#
+# Merge mirrors
+#
+ for LVDIR in `cat $LVMIRLISTFILE`
+ do
+  LVB=`echo $LVDIR | cut -d ":" -f1`
+  MNTDIR=`echo $LVDIR | cut -d ":" -f2`
+  FSTYPE=`echo $LVDIR | cut -d ":" -f3`
+  LV=`echo $LVB | sed -e s@".$"@""@`
+#
+# Only merge if fs is really mirrored (not lofs)
+# Only merge if fs is really mirrored (not nfs)
+#
+  if [ "$FSTYPE" = "hfs" -o "$FSTYPE" = "vxfs" ]
+  then
+   echo "**Merging mirror"
+   lvmerge ${LVB} ${LV}
+   lvlnboot -R
+  fi
+ done
+}
+#
+#
+#**************************************************************************
+#
+# Starts here
+#
+SHOWVERSION="FALSE"
+CREATEGF="TRUE"
+DOBU="TRUE"
+RESTOREM="TRUE"
+VERIFY="FALSE"
+#
+# Source main configuration file
+#
+. /etc/admintools.src
+#
+# Source configuration file
+#
+. $ADMINTOOLSETC/backuplvs.src
+#
+# Set default backup graph
+#
+GRAPH1="${GRAPH1}.${EXT}"
+#
+USAGE="$0 [-l log_dir] [-u unique_mark] [-g graph_file] [-t tape_device] [-f config_filename] [-m mount_dir] [-M y|n] [-c] [-r] [-N] [-V]"
+#
+# Get command line options
+#
+set -- `getopt l:u:g:t:f:m:M:crNV $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+ _exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Specify log directory
+#
+	-l)
+		LOGDIR=$2
+		shift 2
+	;;
+#
+# Specify mark option
+#
+	-u)
+		MARK=$2
+		shift 2
+	;;
+#
+# Specify graph file
+#
+	-g)
+		GRAPH1=$2
+		shift 2
+	;;
+#
+# Specify special file for tape
+#
+	-t)
+		TAPEDEVICE=$2
+		shift 2
+	;;
+#
+# Specify filename which will contain lvm/graph filenames
+#
+	-f)
+		CONFIGFILE="$2"
+		shift 2
+	;;
+#
+# Specify mount directory
+#
+	-m)
+		MIRDIR="$2"
+		shift 2
+	;;
+#
+# Unmount directory if already mounted
+#
+	-M)
+		UNMOUNTDIRS="$2"
+		shift 2
+	;;
+#
+# Only do creating of mounted mirrors
+#
+	-c)
+		CREATEGF="TRUE"
+		DOBU="FALSE"
+		RESTOREM="FALSE"
+		shift
+	;;
+#
+# Unmount mirrors and merge only (after -c)
+#
+	-r)
+		CREATEGF="FALSE"
+		DOBU="FALSE"
+		RESTOREM="TRUE"
+		shift
+	;;
+#
+# Verify backup
+#
+	-N)
+		VERIFY="TRUE"
+		shift
+	;;
+#
+# Version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check bounds of $UNMOUNTDIRS
+#
+if [ "$UNMOUNTDIRS" != "y" -a "$UNMOUNTDIRS" != "n" ]
+then
+ echo "ERROR : Invalid argument to -M option"
+ SHOWVERSION="TRUE"
+fi
+#
+# Check for showing version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo $VERSION
+ echo $USAGE
+ _exit 0
+fi
+#
+# Make the mark the datestamp if not already specified
+#
+if [ -z "$MARK" ]
+then
+ MARK=$DATESTAMP
+fi
+#
+# Make files unique to this backup process
+#
+#BACKUPINDEX="${LOGDIR}/${BACKUPINDEX}_${MARK}"
+#LVMIRLISTFILE="${LOGDIR}/${LVMIRLISTFILE}_${MARK}"
+#GRAPHFILE="${LOGDIR}/${GRAPHFILE}_${MARK}"
+#
+BACKUPINDEX="${LOGDIR}/${BACKUPINDEX}_${MARK}.${EXT}"
+LVMIRLISTFILE="${LOGDIR}/${LVMIRLISTFILE}_${MARK}.${EXT}"
+GRAPHFILE="${LOGDIR}/${GRAPHFILE}_${MARK}.${EXT}"
+MNTDIRLISTFILE="${LOGDIR}/${MNTDIRLISTFILE}_${MARK}.${EXT}"
+#
+#LVLISTFILE="${TMPDIR}/${LVLISTFILE}_${MARK}"
+#GRAPH2="${TMPDIR}/${GRAPH2}_${MARK}"
+#GTMP1="${TMPDIR}/${GTMP1}_${MARK}"
+#GTMP2="${TMPDIR}/${GTMP2}_${MARK}"
+#
+LVLISTFILE="${TMPDIR}/${LVLISTFILE}_${MARK}.${EXT}"
+GRAPH2="${TMPDIR}/${GRAPH2}_${MARK}.${EXT}"
+GTMP1="${TMPDIR}/${GTMP1}_${MARK}.${EXT}"
+GTMP2="${TMPDIR}/${GTMP2}_${MARK}.${EXT}"
+#
+# Set initial exit status
+#
+let "EXITSTAT=0"
+#
+# Create graph file
+#
+if [ "$CREATEGF" = "TRUE" ]
+then
+#
+# Make sure the graph file exists
+#
+ if [ ! -r "$GRAPH1" ]
+ then
+  echo "ERROR : Graph file $GRAPH1 does not exist"
+  _exit 4
+ fi
+#
+# Clear return status
+#
+ let "RETSTAT=0"
+ _createGraphFile
+#
+# Set exit status
+#
+ let "EXITSTAT=EXITSTAT+RETSTAT"
+ > $CONFIGFILE
+ echo $LVMIRLISTFILE >> $CONFIGFILE
+ echo $GRAPHFILE >> $CONFIGFILE
+#
+# Remove temporary files
+#
+ rm $GRAPH2
+ rm $LVLISTFILE
+ rm $GTMP1
+ rm $GTMP2
+#
+fi
+#
+# Do backup
+#
+if [ "$DOBU" = "TRUE" ]
+then
+ let "RETSTAT=0"
+ _doBackup
+ let "EXITSTAT=EXITSTAT+RETSTAT"
+fi
+#
+# Restore mirrors
+#
+if [ "$RESTOREM" = "TRUE" ]
+then
+ LVMIRLISTFILE=`cat $CONFIGFILE | head -1 | tail -1`
+ GRAPHFILE=`cat $CONFIGFILE | head -2 | tail -1`
+ let "RETSTAT=0"
+ _restoreMirrors
+ let "EXITSTAT=EXITSTAT+RETSTAT"
+fi
+#
+# Exit with status
+#
+_exit $EXITSTAT
+#

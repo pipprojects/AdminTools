@@ -1,0 +1,156 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Add version numbers		1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+_printformat () {
+  ENTRY="$1"
+  COLMAX="$2"
+  let "k=-1"
+  let "FLEN=4"
+  echo "$ENTRY" | awk 'BEGIN{SPACE=" ";SPACES="";LMAX='"$COLMAX"';FNUM='"$k"'+1;FLEN='"$FLEN"'}{
+                          LENTRY=length($FNUM)
+                          NUMSPACES=LMAX-LENTRY
+                          for (n=1;n<=NUMSPACES;n++){
+                           SPACES=SPACES SPACE
+                          }
+			  if ( $FNUM == int($FNUM) ){
+                           printf "%'"$FLEN"'d%s",$FNUM,substr(SPACES,1,NUMSPACES-FLEN)
+			  }
+			  else{
+                           printf "%s%s",$FNUM,SPACES
+			  }
+                         }'
+}
+
+
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ TMPLAST="/tmp/last.$$"
+ last > $TMPLAST
+ for login in `cat $TMPLAST | egrep -v "wtmp begins|^reboot" | sed /^$/d | awk '{printf "%s:%s:%2.2d\n",$3,$4,$5}' | uniq`
+ do
+  CHECK=`echo $login | awk -F ":" '{printf "%s %s %2d",$1,$2,$3}'`
+  NUM=`cat $TMPLAST | grep "$CHECK" | wc -l`
+  USERS=`cat $TMPLAST | grep "$CHECK" | awk '{print $1}' | sort -u`
+  _printformat "$CHECK" 10
+  echo " : \c"
+  _printformat "TOTAL USERS" 14
+  echo " : \c"
+  _printformat "$NUM" 4
+  echo
+  if [ "$SHOWUSERS" = "TRUE" ]
+  then
+   for user in $USERS
+   do
+    USERSNUM=`cat $TMPLAST | grep "$CHECK" | awk '{if ($1 ~ /'"${user}"'/ ) {print $1}}' | wc -l`
+    _printformat " - " 10
+    echo "   \c"
+    _printformat " $user" 14
+    echo " : \c"
+    _printformat "$USERSNUM" 4
+    echo
+   done
+  fi
+ done
+ if [ -f $TMPLAST ]
+ then
+  rm $TMPLAST
+ fi
+#
+#
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+SHOWUSERS="FALSE"
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-u] [-V Version]"
+set -- `getopt uV $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Option
+#
+	-u)
+		SHOWUSERS="TRUE"
+		shift 1
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

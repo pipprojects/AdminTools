@@ -1,0 +1,115 @@
+#!/bin/ksh
+#
+
+
+function _getMb {
+#
+# This file is always in the root of a mounted filesystem
+#
+LAF="lost+found"
+FSTYPES="vxfs:hfs:lofs:nfs"
+FSTYPES="ext2:ext3:nfs:smbfs"
+#
+let "TOT=0"
+for line in `cat $GRAPH | awk '{print $1":"$2}'`
+do
+ IE=`echo $line | cut -d ":" -f1`
+ fsg=`echo $line | cut -d ":" -f2`
+#
+ if [ $IE = "i" ]
+ then
+  fp=`echo $fsg | cut -d "/" -f1`
+  fpdir=`echo $fsg | cut -d "/" -f2-`
+  fsgmtmp="${DIR}/${fpdir}"
+  fsgm=`echo $fsgmtmp | sed -e s@"^/"@""@ -e s@"/$"@""@ -e s@"^"@"/"@`
+#
+  for fs in `cat /etc/mtab | awk '{print $2}'`
+  do
+   if [ "$fs" = "$fsgm" ]
+   then
+    MOUNTTAB="/etc/mnttab"
+    MOUNTTAB="/etc/mtab"
+    fstypem=`cat $MOUNTTAB | awk -v FSYS=${fs} '{if ( $2 == FSYS ){print $3}}'`
+    FSOK="FALSE"
+    for fstype in `echo $FSTYPES | sed -e s/":"/" "/g`
+    do
+     if [ $fstypem = $fstype ]
+     then
+      FSOK="TRUE"
+     fi
+    done
+    #if [ ! -a "${fsgm}/${LAF}" ]
+    #then
+    if [ $FSOK != "TRUE" ]
+    then
+     echo "ERROR: $fsgm is not a mounted filesystem"
+    else
+     bdfline=`/opt/admintools/sbin/bdf.ksh $fs | tail +2`
+     KB=`echo $bdfline | awk '{print $3}'`
+     let "TOT=TOT+KB"
+    fi
+   fi
+  done
+ fi
+done
+let "MB=TOT/1020"
+echo "Total of ${MB} MBytes in graph file $GRAPH"
+}
+
+#
+# Starts here
+#
+GRAPH="backup.list"
+DIR=""
+#
+# Get command line options
+#
+USAGE="$0 [-g graph] [-r root_dir]"
+#
+set -- `getopt g:r: $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+ exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Graph file
+#
+	-g)
+		GRAPH=$2
+		shift 2
+	;;
+#
+# Root mount point
+#
+	-r)
+		DIR=$2
+		shift 2
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+
+if [ ! -r "$GRAPH" ]
+then
+ echo "Graph file $GRAPH is not readable"
+ exit 1
+fi
+if [ -n "$DIR" ]
+then
+ if [ ! -r "$DIR" ]
+ then
+  echo "Directory $DIR is not readable"
+  exit 1
+ fi
+fi
+
+_getMb
+
+

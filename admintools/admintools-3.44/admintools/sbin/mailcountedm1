@@ -1,0 +1,39 @@
+#!/bin/ksh
+#
+. /etc/admintools.src
+#
+cd $LOCALETC
+COUNTFILE="countitemsedm1.log"
+DATE="`date '+%d/%m/%y'`"
+JN=`caljul -d "${DATE}" | awk '{print $1}'`
+YR=`caljul -d "${DATE}" | awk '{print $2}'`
+DATEL=$(ls ${COUNTFILE}.?????? | sort -t "." -n -k 3.5,3.6 -k 3.3,3.4 -k 3.1,3.2 | tail -1 | cut -d "." -f 3 | awk '{print substr($1,1,2)"/"substr($1,3,2)"/"substr($1,5,2)}')
+JNL=`caljul -d "${DATEL}" | awk '{print $1}'`
+YRL=`caljul -d "${DATEL}" | awk '{print $2}'`
+let "YRN=YRL"
+let "JNN=JNL+1"
+while [ $YRN -le $YR ]
+do
+ if [ $YRN -ne $YR ]
+ then
+  JNT=$(caljul -d "31/12/${YRN}" | awk '{print $1}')
+ else
+  let "JNT=JN-1"
+ fi
+ while [ $JNN -le $JNT ]
+ do
+  DATEN=`caljul -j "${JNN} ${YRN}"`
+  echo "$DATEN"
+  edmexdays -d "$DATEN" -f $COUNTFILE
+  DD=`echo $DATEN | $AWK -F "/" '{print $1}'`
+  MM=`echo $DATEN | $AWK -F "/" '{print $2}'`
+  YY=`echo $DATEN | $AWK -F "/" '{print substr($3,3,2)}'`
+  EXT="${DD}${MM}${YY}"
+  MAILEDFILE=${COUNTFILE}.${EXT}
+  echo "Subject: $MAILEDFILE\n" | cat - $MAILEDFILE | mail robert.dancer@corporate.ge.com@thomas.ge.com
+  let "JNN=JNN+1"
+ done
+ let "JNN=1"
+ let "YRN=YRN+1"
+done
+#

@@ -1,0 +1,263 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version                 1.0     11 Nov 1997
+#
+# Rob Dancer    Add version numbers and code	1.1     12 Nov 1997
+#
+# Rob Dancer    Problem with a large number of	2.0     10 Dec 1997
+#		mounted filesystems and awk
+#
+# Rob Dancer    Cleaned up script		2.1     10 Dec 1997
+#
+# Rob Dancer    cdrom filesystem was not	2.2     10 Dec 1997
+#		defaulting to the correct
+#		size
+#
+# Rob Dancer    Check for host type		2.3     13 Sep 1999
+#
+# Rob Dancer	Change for Linux		2.4	08 July 2002
+#
+# Rob Dancer	Make PCEN and PCENC int()	2.5	11 March 2004
+#
+# Rob Dancer	Check for iso9660 fs		2.6	19 April 2004
+#
+VERSION="2.6, 19 April 2004"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main code
+#
+function _checkFs {
+#
+# Do the checking in awk
+#
+bdf.ksh | $AWK -v WARN=$WARN -v CONFIG=$CONFIG 'BEGIN{
+			 i=0
+			 while ( getline LINEIN < CONFIG ) {
+			  i++
+			  split(LINEIN,PART,":")
+			  FSYSCLIST[i]=PART[1]
+			  PCENCLIST[i]=PART[2]
+			 }
+			 NUMLINE=i
+		     	}
+			{PCEN=int(substr($5,1,index($5,"%")-1))
+			 FSYS=$6
+			 STATUS="OK"
+			 if ( NR == 1 ){
+			  printf "%s  %-7s %5s\n",$0,"Status","Limit"
+			 } else {
+			  STATUS="OK"
+			  for (i=1; i<=NUMLINE; i++){
+			   FSYSC=FSYSCLIST[i]
+			   PCENC=int(substr(PCENCLIST[i],1,index(PCENCLIST[i],"%")-1))
+			   DEFA=substr(PCENCLIST[i],index(PCENCLIST[i],"%")+1)S
+			   if ( FSYS == FSYSC ){
+			    if ( PCEN >= PCENC ){
+			     STATUS="WARNING"
+			    }
+			    PCENS=PCENC
+			    break
+			   }
+			  }
+			  PRINT="TRUE"
+			  if ( WARN == "TRUE" ){
+			   if ( STATUS != "WARNING" ){
+			    PRINT="FALSE"
+			   }
+			  }
+			  if ( PRINT == "TRUE" ){
+			   printf "%s  %-7s %4s%%%s\n",$0,STATUS,PCENS,DEFA
+			  }
+			 }
+			}'
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+TMPFILE1="/tmp/checkfsfull1.$$"
+TMPFILE2="/tmp/checkfsfull2.$$"
+WARN="FALSE"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Set up percentages
+#
+MINFULL="0"
+MAXFULL="110"
+MAXPCFULL="90"
+MAXPCFULLCDFS="101"
+#
+# Get command line options
+#
+USAGE="$0 [-c config_file] [-w] [-m max_full%] [-V]"
+set -- `getopt c:wm:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+ _exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Specify config file
+#
+        -c)
+		CONFIGFILE=$2
+                shift 2
+        ;;
+#
+# Warnings only
+#
+        -w)
+		WARN="TRUE"
+                shift 1
+        ;;
+#
+# Maximum percentage full
+#
+        -m)
+		MAXPCFULL=$2
+                shift 2
+        ;;
+#
+# Version
+#
+        -V)
+		SHOWVERSION="TRUE"
+                shift 1
+        ;;
+        --)
+                shift
+                break
+        ;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+CONFIGFILETMP=$TMPFILE1
+CONFIG=$TMPFILE2
+#
+# Check value of maximum allowed % full
+#
+VALUE=`echo $MAXPCFULL | $AWK '{print int($1)}'`
+if [ "$VALUE" -gt "$MINFULL" -a "$VALUE" -le "$MAXFULL" ]
+then
+ MAXPCFULL=$VALUE
+else
+ echo "ERROR : Invalid value for maximum % full - $MAXPCFULL"
+ _exit 3
+fi
+#
+# If config file not defined
+#
+if [ -z "$CONFIGFILE" ]
+then
+ #mount -p | $AWK '{print $2":'"${MAXPCFULL}"'%D"}' > $CONFIGFILETMP
+ > $CONFIGFILETMP
+ GDEFAULT="D"
+else
+ cat $CONFIGFILE > $CONFIGFILETMP
+ GDEFAULT=""
+fi
+#
+# Check for missing filesystems
+#
+ENTRIES=`cat $CONFIGFILETMP`
+if [ $HOSTTYPE = "HP" ]
+then
+ FSSYSCOLNUM=2
+ FSTYPECOLNUM=3
+ MCOMMAND="mount -p"
+elif [ $HOSTTYPE = "LINUX" ]
+then
+ FSSYSCOLNUM=2
+ FSTYPECOLNUM=3
+ MCOMMAND="cat /etc/mtab"
+else
+ FSSYSCOLNUM=3
+ FSTYPECOLNUM=4
+ MCOMMAND="mount -p"
+fi
+#
+for line in `$MCOMMAND | $AWK -v FSTYPECOLNUM=${FSTYPECOLNUM} FSSYSCOLNUM=${FSSYSCOLNUM}'{print $FSSYSCOLNUM":"$FSTYPECOLNUM}'`
+do
+ fsys=`echo $line | cut -d ":" -f1`
+ fstype=`echo $line | cut -d ":" -f2`
+#
+# CD filesystems can be 100% full and are often tranisent
+#
+ if [ $fstype = "cdfs" -o $fstype = "iso9660" ]
+ then
+  pcen=${MAXPCFULLCDFS}
+ else
+  pcen="${MAXPCFULL}"
+ fi
+#
+# Set percentage marker for default values for unspecified mounted filesystem
+#
+ DEFAULT="D"
+ for entry in $ENTRIES
+ do
+  fsysc=`echo $entry | cut -d ":" -f1 | sed -e s@"\(^.\{1,\}\)/$"@"\1"@g`
+  if [ $fsys = $fsysc ]
+  then
+   DEFAULT=$GDEFAULT
+   pcen=`echo $entry | cut -d ":" -f2 | sed -e s/"%.*"/""/g`
+   break
+  fi
+ done
+ echo "${fsys}:${pcen}%${DEFAULT}" >> $CONFIG
+done
+#
+# Check filesystem
+#
+_checkFs
+#
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Remove temporary files
+#
+if [ -f "$TMPFILE1" ]
+then
+ rm -f $TMPFILE1
+fi
+if [ -f "$TMPFILE2" ]
+then
+ rm -f $TMPFILE2
+fi
+#
+# Exit with status
+#
+_exit $EXITSTAT
+#

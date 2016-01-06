@@ -1,0 +1,111 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     13 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+for dir in `cat /etc/mnttab | awk '{print $2}' | sort -r`
+do
+ ROOTDIR="/`echo $dir | cut -d "/" -f2`"
+ if [ "$ROOTDIR" = "$MIRDIR" ]
+ then
+  echo "Unmount $dir"
+  umount $dir
+ fi
+done
+}
+
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+MIRDIR="/BACKUPLVS"
+#
+# Get command line options
+#
+USAGE="$0 [-m mount_pount] [-V Version]"
+set -- `getopt m:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Option
+#
+	-m)
+		MIRDIR=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+##
+## Check bounds of OPTION
+##
+#if [ -z "$OPTION" ]
+#then
+ #echo "ERROR : Invalid option - $OPTION"
+ #_exit 1
+#else
+ #OPTION=$OPTION
+#fi
+#
+# Do Main
+#
+_Main
+#
+# Exit OK
+#
+_exit 0
+

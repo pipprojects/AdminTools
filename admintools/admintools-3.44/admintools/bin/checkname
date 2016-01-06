@@ -1,0 +1,161 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    This script checks for a user	2.3     13 Jan 1998
+#		on the system in the
+#		/etc/password file		
+#
+# Rob Dancer    Removed echoing of name		2.4     15 Jan 1998
+#
+VERSION="2.4, 15 Jan 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+if [ -z "$NAME" ]
+then
+ echo
+ echo "Please enter user's name - first_name surname > \c"
+ read NAME
+fi
+
+MNAME=`echo "$NAME" | sed -e s@"\*"@".*"@g | awk '{
+					 SPACE=""
+					 for (i=1; i<=NF; i++){
+					  printf "%s%s.*",SPACE,$i
+					  SPACE=" "
+					 }
+					}'`
+
+USER=`cat /etc/passwd | awk -F ":" '{print $1":"$5}' | cut -d "," -f1 | grep -E -i ":.*${MNAME}" | awk '{printf "%s,",$0}'`
+NUM=`cat /etc/passwd | awk -F ":" '{print $5}' | cut -d "," -f1 | grep -E -i "$MNAME" | wc -l `
+#
+echo
+#
+if [ $NUM -eq 0 ]
+then
+ echo "User does not exist"
+else
+ if [ $NUM -eq 1 ]
+ then
+  isorare="is"
+  sornot=""
+ else
+  isorare="are"
+  sornot="es"
+ fi
+ echo "There ${isorare} ${NUM} match${sornot} for this user"
+ let "num=0"
+ while [ $num -lt $NUM ]
+ do
+  let "num=num+1"
+  USERN=`echo $USER | cut -d "," -f${num}`
+  UNAME=`echo $USERN | cut -d ":" -f1`
+  RNAME=`echo $USERN | cut -d ":" -f2`
+  echo "  Username = $UNAME	Real Name = $RNAME"
+ done
+fi
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+NAME=""
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-n name] [-V Version]"
+#set -- `getopt n:V $*`
+getopt n:V $* > /dev/null
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Name
+#
+	-n)
+		NAME="$2"
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

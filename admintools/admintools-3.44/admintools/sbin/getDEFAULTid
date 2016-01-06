@@ -1,0 +1,21 @@
+#!/bin/ksh
+#
+
+#
+CLASS=$1
+#
+echo "#HW_ID,HWADD,VENDOR TYPE"
+echo "#=====,=====,==========="
+TMPFILE="/tmp/ioscan.f.$$"
+ioscan -f > $TMPFILE
+let "hw_id=100"
+for hw in `ioscan -fk | awk '{if ( $1 ~ /^'"$CLASS"'$/ ) print $3}'`
+do
+ hwC=`echo $hw | sed -e s@"\/"@"\\\\\/"@g`
+ VENDOR=`cat $TMPFILE | awk '{if ( $3 ~ /^'"$hwC"'$/) print $7}'`
+ TYPE=`cat $TMPFILE | awk '{if ( $3 ~ /^'"$hwC"'$/) print $8" "$9" "$10" "$11" "$12}'`
+ let "hw_id=hw_id+1"
+ echo "$hw_id,$hw,$VENDOR $TYPE"
+done
+rm $TMPFILE
+

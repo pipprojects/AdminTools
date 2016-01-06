@@ -1,0 +1,217 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add default -f FILE option	2.3     22 Apr 1998
+#
+# Rob Dancer    Change getopt to getopts	2.4     23 Apr 1998
+#
+# Rob Dancer    checkedmcount			3.0	07 May 1998
+#
+# Rob Dancer    Changed profile format		3.1	11 May 1998
+#
+# Rob Dancer    awk error			3.2	11 May 1998
+#
+# Rob Dancer    Scheduled and in progess	3.3	02 Jun 1998
+#
+# Rob Dancer    Checks for no sched. and in	3.4	04 Jun 1998
+#		prog. items
+#
+VERSION="3.4, 04 Jun 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+TEXTP[1]="Scheduled" 
+TEXTP[2]="In progess" 
+#
+for LINE in `cat $COUNTFILE | $AWK '{print $1","$2","$3","$4}'`
+do
+ DATE=$(echo $LINE | $AWK -F "," '{print $1}')
+ TIME=$(echo $LINE | $AWK -F "," '{print $2}')
+ TIMES=$(echo $TIME | $AWK -F ":" '{print $1":"$2":00"}')
+#
+# 1 is scheduled
+# 2 is in progess
+#
+ for NUMBER in 1 2
+ do
+  TEXT=${TEXTP[$NUMBER]}
+  DATA=$(echo $LINE | $AWK -F "," '{VAR='"$NUMBER"'+2; print $VAR}')
+  DATAT[$NUMBER]=$DATA
+  ENTRY=$(grep "^${TIMES}" $PROFILE)
+  if [ -n "$ENTRY" ]
+  then
+   MIN=$(echo $ENTRY | $AWK -F "," '{VAR=(('"$NUMBER"'-1)*2)+2; print $VAR}')
+   MAX=$(echo $ENTRY | $AWK -F "," '{VAR=(('"$NUMBER"'-1)*2)+3; print $VAR}')
+   if [ $MAX -lt "$DATA" ]
+   then
+    let "MESSG=(NUMBER-1)*2+1"
+    #echo "WARNING : $TEXT item count exceeded - $DATE $TIME Max: $MAX Actual: $DATA"
+    MESSAGE=$(cat $MESSGFILE | sed -e ${MESSG}p -n | cut -d "|" -f2)
+    eval echo "$MESSAGE"
+   elif [ $MIN -gt "$DATA" ]
+   then
+    let "MESSG=(NUMBER-1)*2+2"
+    #echo "WARNING : $TEXT item count too low - $DATE $TIME Min: $MIN Actual:$DATA"
+    MESSAGE=$(cat $MESSGFILE | sed -e ${MESSG}p -n | cut -d "|" -f2)
+    eval echo "$MESSAGE"
+   fi
+  fi
+ done
+ SCHED=${DATAT[1]}
+ INPROG=${DATAT[2]}
+ if [ $INPROG -eq 0 -a $SCHED -gt 0 ]
+ then
+  MESSG=5
+  #echo "WARNING : There are scheduled items but none are in progress - $DATE $TIME In Progress : $INPROG Scheduled : $SCHED"
+  MESSAGE=$(cat $MESSGFILE | sed -e ${MESSG}p -n | cut -d "|" -f2)
+  eval echo "$MESSAGE"
+ fi
+done
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+OPTION=""
+PROFILE="profile.cfg"
+COUNTFILE="-"
+MESSGFILE="${LOCALETC}/edmcountwarnings.cfg"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-f countfile] [-p profile] [-V Version]"
+while getopts f:p:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Count file
+#
+	f)
+		COUNTFILE=$OPTARG
+	;;
+#
+# File
+#
+	p)
+		PROFILE=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of PROFILE
+#
+if [ -z "$PROFILE" ]
+then
+ echo "ERROR : Filename required"
+ echo "$USAGE"
+ EXITSTAT=2
+ _exit $EXITSTAT
+else
+ if [ ! -r "$PROFILE" ]
+ then
+  echo "ERROR : File $PROFILE does not exist or cannot be opened"
+  EXITSTAT=3
+ _exit $EXITSTAT
+ fi
+fi
+#
+# Check bounds of COUNTFILE
+#
+if [ -z "$COUNTFILE" ]
+then
+ echo "ERROR : Filename required"
+ echo "$USAGE"
+ EXITSTAT=2
+ _exit $EXITSTAT
+else
+ if [ $COUNTFILE != "-" ]
+ then
+  if [ ! -r "$COUNTFILE" ]
+  then
+   echo "ERROR : File $COUNTFILE does not exist or cannot be opened"
+   EXITSTAT=3
+  _exit $EXITSTAT
+  fi
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

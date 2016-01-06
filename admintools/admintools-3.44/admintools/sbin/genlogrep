@@ -1,0 +1,648 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    genlogrep			3.0     21 Apr 1998
+#
+# Rob Dancer    Changed reference to logfile	3.1     22 Apr 1998
+#
+# Rob Dancer    Logfile now picked up		3.2     22 Apr 1998
+#
+# Rob Dancer    Changed reference to		3.3     22 Apr 1998
+#		templatesfile
+#
+# Rob Dancer	Added option to change log file	3.4     22 Apr 1998
+#
+# Rob Dancer	Template is now worked out on	3.5     22 Apr 1998
+#		the fly
+#
+# Rob Dancer	Duplicate lines now resolved	3.6	23 Apr 1998
+#
+# Rob Dancer	Set start and stop times	3.7	23 Apr 1998
+#
+# Rob Dancer	Set start and stop times again	3.8	23 Apr 1998
+#
+# Rob Dancer	Start and stop times fix	3.9	23 Apr 1998
+#
+# Rob Dancer	Removed old routine		4.0	23 Apr 1998
+#
+# Rob Dancer	Read from many log files	4.1	24 Apr 1998
+#
+# Rob Dancer	Changed reference to log files	4.2	24 Apr 1998
+#
+# Rob Dancer	Cleaned up time checks		4.3	27 Apr 1998
+#
+# Rob Dancer	Removed old options		4.4	28 Apr 1998
+#
+VERSION="4.4, 28 Apr 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+echo "Template,Date,Time,Description,Item"
+cat $LISTLOG | $AWK 'BEGIN{
+			 NUMITEM=0
+			 POSPROC="FALSE"
+			 DATEPRE="00/00/00"
+			 TIMEPRE="00:00:00"
+			 KEYPRE=""
+			 DATE="00/00/00"
+			 TIME="00:00:00"
+			 KEY=""
+			 KEY1=""
+			 KEY2=""
+			 KEY3=""
+			 NUMKEY1=0
+			 NUMKEY2=0
+			 NUMKEY3=0
+			 KEY1A[0]=""
+			 KEY2A[0]=""
+			 KEY3A[0]=""
+			 TEMPLATESTART="FALSE"
+			 WORKITEMSTART="FALSE"
+			 BACKUPSTART="FALSE"
+			 PROCESSSTART="FALSE"
+			 TOTALS="FALSE"
+			 ENDITEM="FALSE"
+			 BACKUPSTOP="FALSE"
+			 TEMPLATE=""
+			 STARTT="'"$STARTT"'"
+			 STOPT="'"$STOPT"'"
+			 LENSTARTT=length(STARTT)
+			 SEPSTARTT=index(STARTT," ")
+			 DATESTART=substr(STARTT,1,SEPSTARTT-1)
+			 TIMESTART=substr(STARTT,SEPSTARTT+1,LENSTARTT-SEPSTARTT)
+			 DDSTART=substr(DATESTART,1,2)
+			 MMSTART=substr(DATESTART,4,2)
+			 YYSTART=substr(DATESTART,7,2)
+			 HHSTART=substr(TIMESTART,1,2)
+			 mmSTART=substr(TIMESTART,4,2)
+			 SSSTART=substr(TIMESTART,7,2)
+			 LENSTOPT=length(STOPT)
+			 SEPSTOPT=index(STOPT," ")
+			 DATESTOP=substr(STOPT,1,SEPSTOPT-1)
+			 TIMESTOP=substr(STOPT,SEPSTOPT+1,LENSTOPT-SEPSTOPT)
+			 DDSTOP=substr(DATESTOP,1,2)
+			 MMSTOP=substr(DATESTOP,4,2)
+			 YYSTOP=substr(DATESTOP,7,2)
+			 HHSTOP=substr(TIMESTOP,1,2)
+			 mmSTOP=substr(TIMESTOP,4,2)
+			 SSSTOP=substr(TIMESTOP,7,2)
+			 START="FALSE"
+			 FINISH="FALSE"
+			}
+			{
+			 LISTLOGFILE=$0
+			 while ( getline < LISTLOGFILE ) {
+#
+# Check start template
+#
+			 TEMPLATESTART="FALSE"
+			 if ( $4 == "ebbackup" ) {
+			  if ( $5 == "-new" ) {
+			   TEMPL=$6
+			   DATE=$1
+			   DD=substr(DATE,4,2)
+			   MM=substr(DATE,1,2)
+			   YY=substr(DATE,7,2)
+			   DATE=DD"/"MM"/"YY
+			   TIME=$2
+			   KEY=$3
+			   ITEMF=""
+			   TEMPLATESTART="TRUE"
+			  } else {
+			   if ( $5 == "-i" ) {
+			    TEMPL=$7
+			    DATE=$1
+			    DD=substr(DATE,4,2)
+			    MM=substr(DATE,1,2)
+			    YY=substr(DATE,7,2)
+			    DATE=DD"/"MM"/"YY
+			    TIME=$2
+			    KEY=$3
+			    ITEMF=$6
+			    TEMPLATESTART="TRUE"
+			   } else {
+			    if ( $7 == "-i" ) {
+			     TEMPL=$9
+			     DATE=$1
+			     DD=substr(DATE,4,2)
+			     MM=substr(DATE,1,2)
+			     YY=substr(DATE,7,2)
+			     DATE=DD"/"MM"/"YY
+			     TIME=$2
+			     KEY=$3
+			     ITEMF=$8
+			     TEMPLATESTART="TRUE"
+			    } else {
+			     TEMPL=""
+			    }
+			   }
+			  }
+			 }
+#
+# Check start scheduling
+#
+			 WORKITEMSTART="FALSE"
+			 if ( $4 == "workitem" && $6 == "scheduled" ) {
+			  DATE=$1
+			  DD=substr(DATE,4,2)
+			  MM=substr(DATE,1,2)
+			  YY=substr(DATE,7,2)
+			  DATE=DD"/"MM"/"YY
+                          TIME=$2
+			  KEY=$3
+			  ITEMF=$5
+			  TEMPLATE=""
+			  WORKITEMSTART="TRUE"
+			 }
+#
+# Check start processing
+#
+			 PROCESSSTART="FALSE"
+			 if ( $1 == "starting" && $2 == "processing" && $3 == "of" && $4 == "work" && $5 == "item" ) {
+			  DATE=DATEPRE
+                          TIME=TIMEPRE
+			  KEY=substr(KEYPRE,1,index(KEYPRE,",")-1)"]"
+			  ITEMF=$6
+			  TEMPLATE=substr($12,2,length($12)-2)
+			  PROCESSSTART="TRUE"
+			 }
+#
+# Check backup initialization
+#
+			 INITIALSTART="FALSE"
+			 if ( $4 == "backup" && $5 == "initialization" && $6 == "command" && $7 == "issued" ) {
+			  DATE=$1
+			  DD=substr(DATE,4,2)
+			  MM=substr(DATE,1,2)
+			  YY=substr(DATE,7,2)
+			  DATE=DD"/"MM"/"YY
+                          TIME=$2
+                          KEY=$3
+			  ITEMF=$14
+			  TEMPLATE=substr($12,2,length($12)-2)
+			  INITIALSTART="TRUE"
+			 }
+#
+# Check start backup
+#
+			 BACKUPSTART="FALSE"
+			 if ( $4 == "backup" && $5 == "for" && $6 == "system" ) {
+			  if ( $8 == "started" ) {
+			   DATE=$1
+			   DD=substr(DATE,4,2)
+			   MM=substr(DATE,1,2)
+			   YY=substr(DATE,7,2)
+			   DATE=DD"/"MM"/"YY
+                           TIME=$2
+                           KEY=$3
+			   ITEMF=$11
+			   TEMPLATE=""
+			   BACKUPSTART="TRUE"
+			  } else {
+			   if ( $9 == "started" ) {
+			    TEMPLATE=""
+			    DATE=$1
+			    DD=substr(DATE,4,2)
+			    MM=substr(DATE,1,2)
+			    YY=substr(DATE,7,2)
+			    DATE=DD"/"MM"/"YY
+                            TIME=$2
+                            KEY=$3
+			    ITEMF=$12
+			    BACKUPSTART="TRUE"
+			   }
+			  }
+			 }
+#
+# Check size of data
+#
+			 ENDITEM="FALSE"
+			 if ( TOTALS == "TRUE" ) {
+			  ITEMF=$4
+			  TEMPLATE=substr($6,2,length($6)-3)
+			  TOTALS="FALSE"
+			  ENDITEM="TRUE"
+			 }
+			 TOTALS="FALSE"
+			 if ( $1 == "totals:" ) {
+			  SIZE=$2" "$3
+			  STATUS=substr($0,index($0,")")+12,length($0))
+			  DATE=DATEPRE
+			  TIME=TIMEPRE
+                          KEY=KEYPRE
+			  TOTALS="TRUE"
+			 }
+#
+# Check stop backup
+#
+			 BACKUPSTOP="FALSE"
+			 if ( $1 == "processing" && $2 == "of" && $3 == "work" && $4 == "item" ) {
+			  DATE=DATEPRE
+                          TIME=TIMEPRE
+                          KEY=KEYPRE
+			  ITEMF=$5
+			  TEMPLATE=substr($7,2,length($7)-2)
+			  LEVEL=$9
+			  INDCOM=index($10,",")
+			  if ( INDCOM != 0 ) {
+			   STATUS=substr($10,1,INDCOM-1)
+			  } else {
+			   STATUS=$10
+			  }
+			  BACKUPSTOP="TRUE"
+			 }
+#
+# Check now for finish
+#
+			 if ( START == "TRUE" ) {
+#
+# Check stop date and time
+#
+			  DD=substr(DATE,1,2)
+			  MM=substr(DATE,4,2)
+			  YY=substr(DATE,7,2)
+			  HH=substr(TIME,1,2)
+			  mm=substr(TIME,4,2)
+			  SS=substr(TIME,7,2)
+			  if ( YY > YYSTOP ) {
+			   FINISH="TRUE"
+			  } else {
+			   if ( YY == YYSTOP ) {
+			    if ( MM > MMSTOP ) {
+			     FINISH="TRUE"
+			    } else {
+			     if ( MM == MMSTOP ) {
+			      if ( DD > DDSTOP ) {
+			       FINISH="TRUE"
+			      } else {
+			       if ( DD == DDSTOP ) {
+			        if ( HH > HHSTOP ) {
+			         FINISH="TRUE"
+			        } else {
+			         if ( HH == HHSTOP ) {
+			          if ( mm > mmSTOP ) {
+			           FINISH="TRUE"
+			          } else {
+			           if ( mm == mmSTOP ) {
+			            if ( SS > SSSTOP ) {
+			             FINISH="TRUE"
+			            } else {
+			             if ( SS == SSSTOP ) {
+			              FINISH="FALSE"
+				     }
+				    }
+				   }
+				  }
+				 }
+				}
+			       }
+			      }
+			     }
+			    }
+			   }
+			  }
+#print "REAL time="DD"/"MM"/"YY" "HH":"mm":"SS
+#print "STOP time="DDSTOP"/"MMSTOP"/"YYSTOP" "HHSTOP":"mmSTOP":"SSSTOP
+#
+			  if ( FINISH == "FALSE" ) {
+#
+# Process options
+#
+#
+# Template start
+#
+			 if ( TEMPLATESTART == "TRUE" ) {
+			  if ( TEMPL == TEMPLATE ) {
+			   KEY1S=KEY
+			   KEY1T="FALSE"
+			   for ( KEY1I in KEY1A ) {
+			    if ( KEY1S == KEY1A[KEY1I] ) {
+			     KEY1T="TRUE"
+			    }
+			   }
+			   if ( KEY1T == "FALSE" ) {
+			    KEY1A[NUMKEY1]=KEY1S
+			    NUMKEY1=NUMKEY1+1
+			   }
+			   ITEM=ITEMF
+			   INDEX=0
+			   COMMENT="Start Template:,"TEMPLATE":"ITEM","INDEX
+			   printf "%s,%s,%s,%s\n",TEMPLATE,DATE,TIME,COMMENT
+			  }
+			  TEMPLATESTART="FALSE"
+			 }
+#
+# Workitem schedule
+#
+			 if ( WORKITEMSTART == "TRUE" ) {
+			    POSN=index(ITEMF,":")
+			    LEN=length(ITEMF)
+			    CLIENT=substr(ITEMF,2,POSN-2)
+			    ITEM=substr(ITEMF,POSN+1,LEN-POSN-1)
+			    ITEM=CLIENT":"ITEM
+			    INDEX=1
+			    COMMENT="Schedule Item:,"ITEM","INDEX
+                            printf "%s,%s,%s,%s\n",TEMPLATE,DATE,TIME,COMMENT
+			  WORKITEMSTART="FALSE"
+			 }
+#
+# Process start
+#
+			 if ( PROCESSSTART == "TRUE" ) {
+			  POSN=index(ITEMF,":")
+			  LEN=length(ITEMF)
+			  CLIENT=substr(ITEMF,2,POSN-2)
+			  ITEM=CLIENT":"substr(ITEMF,POSN+1,LEN-POSN-2)
+			    ITEM=ITEM
+			    INDEX=2
+			    COMMENT="Processing Item:,"ITEM","INDEX
+			    printf "%s,%s,%s,%s\n",TEMPLATE,DATE,TIME,COMMENT
+			  PROCESSSTART="FALSE"
+			 }
+#
+# Backup start
+#
+			 if ( BACKUPSTART == "TRUE" ) {
+			  POSN=index(ITEMF,":")
+			  LEN=length(ITEMF)
+			  CLIENT=substr(ITEMF,2,POSN-2)
+			  ITEM=CLIENT":"substr(ITEMF,POSN+1,LEN-POSN-1)
+			    KEY3S=KEY
+			    KEY3T="FALSE"
+			    ITEM=ITEM
+			    INDEX=3
+			    COMMENT="Backup Item:,"ITEM","INDEX
+			    printf "%s,%s,%s,%s\n",TEMPLATE,DATE,TIME,COMMENT
+			  BACKUPSTART="FALSE"
+			 }
+#
+# End of item
+#
+			 if ( ENDITEM == "TRUE" ) {
+			  POSN=index(ITEMF,":")
+			  LEN=length(ITEMF)
+			  CLIENT=substr(ITEMF,2,POSN-2)
+			  ITEM=CLIENT":"substr(ITEMF,POSN+1,LEN-POSN-2)
+			      ITEM=ITEM
+			      INDEX=4
+			      COMMENT="Totals Item:"STATUS":"SIZE","ITEM","INDEX
+			      printf "%s,%s,%s,%s\n",TEMPLATE,DATE,TIME,COMMENT
+			  ENDITEM="FALSE"
+			 }
+#
+# Backup stop
+#
+			 if ( BACKUPSTOP == "TRUE" ) {
+			  POSN=index(ITEMF,":")
+			  LEN=length(ITEMF)
+			  CLIENT=substr(ITEMF,2,POSN-2)
+			  ITEM=CLIENT":"substr(ITEMF,POSN+1,LEN-POSN-1)
+			      ITEM=ITEM
+			      INDEX=5
+			      COMMENT="Stop Item:"STATUS":"LEVEL","ITEM","INDEX
+			      printf "%s,%s,%s,%s\n",TEMPLATE,DATE,TIME,COMMENT
+			  BACKUPSTOP="FALSE"
+			 }
+#
+# FINISH=TRUE
+#
+			  } else {
+			   exit
+			  }
+			 }
+#print $0
+#
+# Set previous flags if they are date and time
+#
+			 if ( length($1) == 8 && length($2) == 8 ) {
+			  SEP1=index($1,"/")
+			  if ( SEP1 != 0 ) {
+			   SEP2=index(substr($1,SEP1+1,length($1)),"/")
+			   if ( SEP2 != 0 ) {
+			    DATE=$1
+			    DD=substr(DATE,4,2)
+                            MM=substr(DATE,1,2)
+                            YY=substr(DATE,7,2)
+                            DATE=DD"/"MM"/"YY
+			    SEP1=index($2,":")
+			    if ( SEP1 != 0 ) {
+			     SEP2=index(substr($2,SEP1+1,length($2)),":")
+			     if ( SEP2 != 0 ) {
+			      TIME=$2
+			      KEYPRE=$3
+			      TEMPLATE=""
+			     }
+			    }
+			   }
+			  }
+			 }
+			 DATEPRE=DATE
+			 TIMEPRE=TIME
+#
+# START=FALSE
+#
+#
+# Check start date and time
+#
+			  DD=substr(DATE,1,2)
+			  MM=substr(DATE,4,2)
+			  YY=substr(DATE,7,2)
+			  HH=substr(TIME,1,2)
+			  mm=substr(TIME,4,2)
+			  SS=substr(TIME,7,2)
+			  START="FALSE"
+			  if ( YY > YYSTART ) {
+			   START="TRUE"
+			  } else {
+			   if ( YY == YYSTART ) {
+			    if ( MM > MMSTART ) {
+			     START="TRUE"
+			    } else {
+			     if ( MM == MMSTART ) {
+			      if ( DD > DDSTART ) {
+			       START="TRUE"
+			      } else {
+			       if ( DD == DDSTART ) {
+			        if ( HH > HHSTART ) {
+			         START="TRUE"
+			        } else {
+			         if ( HH == HHSTART ) {
+			          if ( mm > mmSTART ) {
+			           START="TRUE"
+			          } else {
+			           if ( mm == mmSTART ) {
+			            if ( SS > SSSTART ) {
+			             START="TRUE"
+			            } else {
+			             if ( SS == SSSTART ) {
+			              START="TRUE"
+				     }
+				    }
+				   }
+				  }
+				 }
+				}
+			       }
+			      }
+			     }
+			    }
+			   }
+			  }
+#print "REAL time="DD"/"MM"/"YY" "HH":"mm":"SS
+#print "START time="DDSTART"/"MMSTART"/"YYSTART" "HHSTART":"mmSTART":"SSSTART
+			 }
+			 close(LISTLOGFILE)
+			}'
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+DAYMIN=1
+DAYMAX=28
+STARTT="01/01/95 00:00:00"
+STOPT="`date '+%d/%m/%y %H:%M:%S'`"
+LISTLOG="listlog.log"
+BACKUPLOG="/ep_home/epoch/EB/log/backups.log"
+#TEMPLATEFILE="../etc/ebtemplates1.cfg"
+TEMPLATEFILE="${LOCALETC}/ebtemplates.cfg"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-a start_time] [-b stop_time] [-l listlogfile] [-V Version]"
+while getopts a:b:l:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+	\?)
+		if [ -z "$OPTARG" ]
+		then
+		 echo $USAGE
+		 _exit 2
+		fi
+	;;
+#
+# Start time
+#
+	a)
+		STARTT="$OPTARG"
+	;;
+#
+# Stop time
+#
+	b)
+		STOPT="$OPTARG"
+	;;
+#
+# List log file
+#
+	l)
+		LISTLOG=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of SINCE
+#
+if [ "$SINCE" -lt $DAYMIN -a "$SINCE" -gt $DAYMAX ]
+then
+ echo "ERROR : Invalid number of days (${DAYMIN} to ${DAYMAX})"
+ EXITSTATUS=2
+ _exit $EXITSTATUS
+fi
+#
+# Check existance of log file
+#
+if [ -f "$LISTLOG" ]
+then
+ if [ ! -r "$LISTLOG" ]
+ then
+  echo "ERROR : Unable to open log file ${LISTLOG}"
+  EXITSTATUS=4
+  _exit $EXITSTATUS
+ fi
+else
+ echo $BACKUPLOG > $LISTLOG
+fi
+#
+# Check existance of templates file
+#
+if [ ! -r "$TEMPLATEFILE" ]
+then
+ echo "ERROR : Unable to open template file ${TEMPLATEFILE}"
+ EXITSTATUS=5
+ _exit $EXITSTATUS
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

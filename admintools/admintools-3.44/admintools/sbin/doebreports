@@ -1,0 +1,19 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer	Initial version of doebreport	1.0	16 Apr 1998
+#		This is a cronjob
+#
+VERSION="2.2, 18 Dec 1997"
+#
+#*****************************************************************************
+#
+. /etc/admintools.src
+DATESTAMP="`date '+%d%m%y'`"
+LOGFILE="${LOCALLOGS}/ebreports_${DATESTAMP}.log"
+touch $LOGFILE
+doreport -t ${LOCALETC}/ebmailto.cfg -m y -a y >> $LOGFILE 2>&1
+#

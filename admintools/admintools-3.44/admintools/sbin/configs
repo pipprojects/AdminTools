@@ -1,0 +1,243 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Added version numbers		1.2     17 Nov 1997
+#
+# Rob Dancer    "-h" option added to makedoc	1.3     18 Nov 1997
+#
+# Rob Dancer    Do a chown wwwit:wwwit for	1.4     26 Nov 1997
+#		newly created directories
+#		and files.
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Compress files after copying	2.1     04 Dec 1997
+#
+# Rob Dancer    Change WWUID and WWWGID		2.2     19 May 1999
+#
+# Rob Dancer    Change getopt to getopts and	3.0	19 May 1999
+#		add extra arguments
+#
+# Rob Dancer    getopts still using $2 not	3.1	23 August 1999
+#		$OPTARG
+#
+# Rob Dancer    Check for host type		3.2	13 September 1999
+#
+# Rob Dancer	Updates				3.3	22 June 2006
+#
+# Rob Dancer	Change datestamp for destdir2	3.4	24 August 2006
+#
+VERSION="3.4, 24 August 2006"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+echo $PATH
+ mkdir -p $CONFIGS
+ cd $CONFIGS
+ if [ -f $CSLOG ]
+ then
+  rm $CSLOG
+ fi
+#
+# Remove old files
+#
+ rm io*.db > /dev/null 2>&1
+ rm *.show > /dev/null 2>&1
+ rm SystemInfo.* > /dev/null 2>&1
+ rm Comments.* > /dev/null 2>&1
+#
+# If Comment file exists then copy it else prompt for information.
+#
+ if [ -r "$CFILENAME" ]
+ then
+  cp $CFILENAME $TMPFILE
+ else
+  echo "Enter details of this configuration (return twice to end)"
+  Line="Test"
+  while [ "$Line" != "" ]
+  do
+   read TMPLine
+   Line=`echo "$TMPLine" | strings`
+   echo $Line >> $TMPFILE
+  done
+ fi
+ mv $TMPFILE $COMMFILE
+#
+# Get system files and io files
+#
+ getcs
+ if [ $HOSTTYPE = "HP" ]
+ then
+  getio
+  ls io*.db >> $CSLOG
+#
+# Get HP-UX Version for makedoc
+#
+  HPUXVER=`cat HPUXVER.inf`
+  echo "Disk config"
+#showdisks > Diskconfig.show
+  echo "Tape config"
+#showtapes > Tapeconfig.show
+  echo "Making document"
+  makedoc -h `hostname` > SystemInfo.txt
+  ls *.show >> $CSLOG
+  ls SystemInfo.* >> $CSLOG
+ fi
+#
+# Add comments file to list
+#
+ ls Comments.inf >> $CSLOG
+#
+# Now make remote directories annd copty across
+#
+ destdir1="`hostname`"
+# Old Datestamp
+# destdir2="`date +'%d_%h_%Y_%H:%M:%S'`"
+#
+ destdir2=$(date '+%Y%m%d.%H%M%S')
+ destdir=${destdir1}/${destdir2}
+ ssh $CSHOST uname -a > /dev/null 2>&1
+ if [ $? -ne 0 ]
+ then
+  echo "ERROR : Cannot access host $CSHOST - check .rhosts or /etc/hosts.equiv file"
+  EXITSTAT=1
+  _exit $EXITSTAT
+ fi
+ ssh $CSHOST "mkdir -p $CSHOME/$destdir; chmod 755 $CSHOME/$destdir1; chown ${WWWUID}:${WWWGID} $CSHOME/$destdir1"
+ FILELIST=`cat $CSLOG`
+ tar cf - $FILELIST | ssh $CSHOST "cd $CSHOME/$destdir; tar xvf -"
+ ssh $CSHOST "chmod 755 $CSHOME/$destdir; chmod 644 $CSHOME/$destdir/*; chown -R ${WWWUID}:${WWWGID} $CSHOME/$destdir"
+#
+# Compress remote files
+#
+ echo "Compressing files"
+ ssh $CSHOST "cd $CSHOME/$destdir; gzip -f *"
+#
+# Remove local files
+#
+ echo "Removing local copies"
+ rm $FILELIST
+#
+# Set return status
+#
+ RETSTAT=0
+}
+
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+CFILENAME=""
+CONFIGS="/tmp/cs"
+CSHOME="/home/configs/hosts"
+CSHOST="`hostname`"
+WWWUID="root"
+WWWGID="sys"
+CSLOG="csfile.log"
+TMPFILE="/tmp/comm.$$"
+COMMFILE="Comments.inf"
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-c comment_filename] [-h host] [-d directory] [-u wwwuid] [-g wwwgid] [-V Version]"
+while getopts c:h:d:u:g:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Comment filename
+#
+	c)
+		CFILENAME=$OPTARG
+	;;
+#
+# Config host
+#
+	h)
+		CSHOST=$OPTARG
+	;;
+#
+# Config directory
+#
+	d)
+		CSHOME=$OPTARG
+	;;
+#
+# Web user id
+#
+	u)
+		WWWUID=$OPTARG
+	;;
+#
+# Web group id
+#
+	g)
+		WWWGID=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

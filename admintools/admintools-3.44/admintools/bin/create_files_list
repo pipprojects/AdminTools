@@ -1,0 +1,11 @@
+#!/bin/ksh
+#
+
+SOURCE="/opt/admintools_setup/HP10.X/"
+
+DIRECT=`pwd`
+cd $SOURCE
+find . -exec ls -aldn {} \; | awk '{print $9":"$1":"$3":"$4}' | tail -n +2
+cd $DIRECT
+
+

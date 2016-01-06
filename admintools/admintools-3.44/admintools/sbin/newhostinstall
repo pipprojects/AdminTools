@@ -1,0 +1,132 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     13 Nov 1997
+#
+# Rob Dancer    Put -h option after SHOWVERSION	1.1     18 Nov 1997
+#
+# Rob Dancer    Check it is possible to remsh	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ remsh $HOST ls > /dev/null 2>&1
+ if [ $? -eq 0 ]
+ then
+  cd ${SOURCE}
+  cd opt
+  cd admintools
+  tar cf - etc/admintools.src | remsh $HOST tar xvf -
+  cd ..
+  cd ..
+  tar cf - opt/admintools/sbin/copyfiles | remsh $HOST tar xvf -
+  RETSTAT=0
+ else
+  echo "ERROR : Check .rhosts for root on $HOST"
+  RETSTAT=1
+ fi
+}
+
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+EXITSTAT=0
+RETSTAT=0
+#
+# Set up user variables
+#
+SOURCE="/opt/admintools_setup/HP10.X"
+#
+# Get command line options
+#
+USAGE="$0 -h host [-V Version]"
+set -- `getopt h:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Host
+#
+	-h)
+		HOST=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Check bounds of OPTION
+#
+if [ -z "$HOST" ]
+then
+ echo "ERROR : Invalid host - $HOST"
+ _exit 1
+else
+ echo "Attempting communication with $HOST"
+ ping $HOST -n 1
+ if [ $? -ne 0 ]
+ then
+  echo "ERROR : Host down or unknown"
+  _exit 3
+ fi
+ echo "Host $HOST is responding"
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit OK
+#
+_exit $EXITSTAT
+#

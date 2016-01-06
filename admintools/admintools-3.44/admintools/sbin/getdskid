@@ -1,0 +1,77 @@
+#!/bin/ksh
+#
+
+#
+FAILDISKI="FALSE"
+#
+echo "#DISK_ID,DISK,MBSIZE,HWID"
+echo "#=======,====,=====,====="
+#
+let "disk_id=1000"
+for disk in `find /dev/dsk -type b -exec ls {} \;`
+do
+ case $HPUXVER in
+	10)
+		hw=`lssf $disk | awk '{print $15}'`
+	;;
+	09)
+		hw=`lssf $disk | awk '{print $7}'`
+	;;
+	*)
+		echo "ERROR : HPUXVER not set"
+		exit 1
+ esac
+ if [ "$hw" != "???" -a -n "$hw" ]
+ then
+  case $HPUXVER in
+	10)
+		hwC=`echo $hw | sed -e s@"\/"@"\\\\\/"@g -e s@"\."@"\\\\\."@g`
+		hwid=`cat iodisk.db | awk -F "," '{if ($2 ~ /^'"$hwC"'$/ )print $1}'`
+	;;
+	09)
+		hwC=`echo $hw | sed -e s@"\/"@"\\\\\/"@g -e s@"\."@"\\\\\."@g`
+		hwid=`cat iodisk.db | awk -F "," '{if ($2 ~ /^'"$hwC"'$/ )print $1}'`
+		if [ -z "$hwid" ]
+		then
+		 hwC=`echo $hw | sed -e s@"\."@"\/"@ -e s@"\/"@"\\\\\/"@g -e s@"\."@"\\\\\."@g`
+		 hwid=`cat iodisk.db | awk -F "," '{if ($2 ~ /^'"$hwC"'$/ )print $1}'`
+		fi
+	;;
+	*)
+		echo "ERROR : HPUXVER not set"
+		exit 1
+  esac
+#
+  rdisk=`echo $disk | sed -e s/"dsk"/"rdsk"/`
+  if [ "$FAILDISKI" != "TRUE" ]
+  then
+   DODISKI="TRUE"
+  else
+   if [ "$hw" != "$hw_pre" ]
+   then
+    DODISKI="TRUE"
+   else
+    DODISKI="FALSE"
+   fi
+  fi
+#
+  if [ "$DODISKI" = "TRUE" ]
+  then
+   diskinfo $rdisk > /dev/null 2>&1
+   if [ $? -ne 0 ]
+    then
+    SIZE=""
+    let "MBSIZE=0"
+    FAILDISKI="TRUE"
+   else
+    SIZE=`diskinfo $rdisk | awk '{if ($1 ~ /size:/ ) print $2}'`
+    let "MBSIZE=SIZE/1024"
+   fi
+  fi
+#
+  let "disk_id=disk_id+1"
+  echo "$disk_id,$disk,$MBSIZE,$hwid"
+  hw_pre=$hw
+ fi
+done
+

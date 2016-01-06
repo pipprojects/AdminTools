@@ -1,0 +1,155 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version                 1.0     13 Oct 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer	Put into standard format	2.1	08 July 2002
+#
+# Rob Dancer	Path to sendmail		2.2	27th November 2006
+#
+VERSION="2.2, 27 November 2006"
+#
+#*****************************************************************************
+#
+# Define the exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#
+# Check for file system full
+#
+ checkfsfull ${SETMAXPCFULL} -w ${SETCONFIG} > $TMPFILE
+ NUMLINES=`cat $TMPFILE | wc -l`
+ if [ "$NUMLINES" -gt 1 ]
+ then
+  echo "Subject: **FILESYSTEM FULL WARNING on `hostname`**" | cat - $TMPFILE | /usr/sbin/sendmail $MAILREC
+ fi
+#
+# Remove temporary file if it exists
+#
+ if [ -f "$TMPFILE" ]
+ then
+  rm -f $TMPFILE
+ fi
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start Here
+#
+. /etc/admintools.src
+#
+MAILFILE="mailto.cfg"
+CONFIGFILE=""
+MAXPCFULL=""
+#
+TMPFILE="/tmp/tmpcheckfsfull.$$"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-m max_full%] [-t mail_list_file] [ -c configuration_file] [-V]"
+while getopts m:t:c:V OPT
+do
+case $OPT in
+#
+# Invalid option
+#       
+	\?)     
+		if [ -z "$OPTARG" ]
+		then
+		 echo $USAGE
+		 _exit 2
+		fi
+	;;
+#
+# Maximum default full
+#
+        m)
+                MAXPCFULL=$OPTARG
+        ;;
+#
+# Specify other mailto file
+#
+        t)
+                MAILFILE=$OPTARG
+        ;;
+#
+# Specify configuration file for checkfsfull
+#
+        c)
+                CONFIGFILE=$OPTARG
+        ;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check configuration file
+#
+if [ -n "${CONFIGFILE}" ]
+then
+ SETCONFIG="-c $CONFIGFILE"
+else
+ SETCONFIG=""
+fi
+#
+# Check maximum % full
+#
+if [ -n "${MAXPCFULL}" ]
+then
+ SETMAXPCFULL="-m $MAXPCFULL"
+else
+ SETMAXPCFULL=""
+fi
+#
+# Set up mail receipients
+#
+if [ -r ${MAILFILE} ]
+then
+ MAILREC=`cat $MAILFILE`
+else
+ MAILREC="root@localhost"
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

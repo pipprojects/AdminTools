@@ -1,0 +1,300 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add default -f FILE option	2.3     22 Apr 1998
+#
+# Rob Dancer    Change getopt to getopts	2.4     23 Apr 1998
+#
+# Rob Dancer    createpvgraphs			3.0     29 Apr 1998
+#
+# Rob Dancer    Added -a, -b and -s options	3.1     30 Apr 1998
+#
+# Rob Dancer    Added cal function and changed	3.2     01 May 1998
+#		functionality
+#
+# Rob Dancer    caljul for neg. numbers changed	3.3     06 May 1998
+#
+# Rob Dancer    awk changed for $AWK		3.4     11 May 1998
+#
+VERSION="3.4, 11 May 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+#
+ if [ -f $TMPFILE1 ]
+ then
+  rm $TMPFILE1
+ fi
+#
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+CALJUL="`caljul -d "$DATESTART"`"
+JNSTART="`echo $CALJUL | $AWK '{print $1}'`"
+YRSTART="`echo $CALJUL | $AWK '{print $2}'`"
+CALJUL="`caljul -d "$DATESTOP"`"
+JNSTOP="`echo $CALJUL | $AWK '{print $1}'`"
+YRSTOP="`echo $CALJUL | $AWK '{print $2}'`"
+echo "From $DATESTART to $DATESTOP"
+let "NUMDAYS=JNSTOP-JNSTART+1"
+let "NUMYRS=YRSTOP-YRSTART+1"
+if [ $NUMDAYS -lt 1 ]
+then
+ if [ $NUMYRS -lt 1 ]
+ then
+  echo "ERROR : Start and stop days invalid ( $DATESTART to $DATESTOP ) "
+  EXITSTAT=5
+  _exit $EXISTAT
+ else
+  NDY=`caljul -d "31/12/${YRSTART}" | $AWK '{print $1}'`
+  let "NUMDAYS=NDY-JNSTART+JNSTOP+1"
+ fi
+fi
+DG="`caljul -d "$DATESTOP" -i b`"
+DATEBEGIN="`caljul -j "$DG" -o a`"
+CALJUL="`caljul -d "$DATEBEGIN" -i a -o a`"
+JNBEGIN="`echo $CALJUL | $AWK '{print $1}'`"
+YRBEGIN="`echo $CALJUL | $AWK '{print $2}'`"
+DATAPRE="${FILEPRE}_data"
+DATAALL="${FILEPRE}_comb"
+#
+# Loop round all metrics
+#
+cat $INFILE > $TMPFILE1
+NLINE=0
+NUMLINE=`cat $TMPFILE1 | wc -l`
+while [ $NLINE -lt $NUMLINE ]
+do
+ let "NLINE=NLINE+1"
+ METRIC=`cat $TMPFILE1 | sed -e ${NLINE}p -n`
+ METNUM=$NLINE
+ echo "${METNUM}) $METRIC"
+#
+ FILES=""
+#
+# Loop round days
+#
+ DATENEXT=$DATEBEGIN
+ JN=$JNBEGIN
+ YR=$YRBEGIN
+ i=$NUMDAYS
+ while [ $i -gt 0 ]
+ do
+  DATE=$DATENEXT
+  FILENAME="${FILEPRE}_${METNUM}_${i}.asc"
+  DATAFILE="${DATAPRE}_${METNUM}_${i}.asc"
+  if [ -f $FILENAME ]
+  then
+   rm $FILENAME
+  fi
+  echo $DATE
+  system=`echo $METRIC | cut -d ":" -f1`
+  pv -batch -format ascii -dest $FILENAME -b $DATE -e $DATE -sum $TIMEP -metric "$METRIC" -gn metrics -ds $system
+  #pv -b $DATE -e $DATE -shift 00:00-23:59 -metric "$METRIC" -gn metrics -sum 1H -ds $system
+  DAY=`echo $DATE | $AWK -F "/" '{print $2}'`
+  MONTH=`echo $DATE | $AWK -F "/" '{print $1}'`
+  YEAR=`echo $DATE | $AWK -F "/" '{print $3}'`
+  DATEDIS="${DAY}/${MONTH}/${YEAR}"
+  #NDOW=`cal $MONTH $YEAR | $AWK 'BEGIN{DAY=int("'"$DAY"'")}{for ( i=1; i<=NF; i++){if ( $i == DAY ){ print i } } }'`
+  NDOW=`cal 04 1998 | $AWK 'BEGIN{
+			 DAY=int("'"$DAY"'")
+			} {
+			 for ( i=1; i<=NF; i++ ) {
+			  if ( $i == DAY ) {
+			   NUM=i+7-NF
+			   print NUM
+			   exit
+			  }
+			 }
+			}'`
+  let "NDOW=NDOW-1"
+  DOW=${WEEK[$NDOW]}
+  cat $FILENAME | $AWK '{if ( NR == 1 ) {print "'"$DOW $DATEDIS"' "$0}else{print $3}}' | sed -e s/"[	 ]"/" "/g -e s/"  "*/" "/g > $DATAFILE
+  if [ $i -eq 1 ]
+  then
+   cat $FILENAME | $AWK '{if ( NR == 1 ) {print "Time"}else{print $2}}' > $TMPTIME
+  fi
+  rm $FILENAME
+  FILES="$DATAFILE $FILES"
+  let "i=i-1"
+  let "JN=JN-1"
+  if [ $JN -eq 0 ]
+  then
+   #JN=-1
+   DATENEXT=`caljul -j "${JN} ${YR}" -i a -o a`
+   CALJUL="`caljul -d "$DATENEXT" -i a -o a`"
+   JN="`echo $CALJUL | $AWK '{print $1}'`"
+   YR="`echo $CALJUL | $AWK '{print $2}'`"
+  else
+   DATENEXT=`caljul -j "${JN} ${YR}" -i a -o a`
+  fi
+ done
+#
+ DATAOUT="${DATAALL}_${METNUM}.txt"
+ paste -d "," $TMPTIME $FILES > $DATAOUT
+ rm $TMPTIME $FILES
+#
+done
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+DATEGRAPH="`date '+%d/%m/%y'`"
+DATESTART=$DATEGRAPH
+DATESTOP=$DATEGRAPH
+NUMBERS=4
+INFILE="-"
+TIMEP="5M"
+TMPTIME="/tmp/tmptime.txt.$$"
+TMPFILE1="/tmp/tmpfile1.$$"
+DATAALL="dataall"
+FILES=""
+FILEPRE="file"
+#
+# Days of week
+#
+WEEK[0]="Sunday"
+WEEK[1]="Monday"
+WEEK[2]="Tuesday"
+WEEK[3]="Wednesday"
+WEEK[4]="Thursday"
+WEEK[5]="Friday"
+WEEK[6]="Saturday"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-d date] [-a date_start] [-b date_stop] [-f file] [-s time] [-p fileprefix] [-V Version]"
+while getopts d:a:b:f:s:p:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Date
+#
+	d)
+		DATEGRAPH=$OPTARG
+		DATESTART=$DATEGRAPH
+		DATESTOP=$DATEGRAPH
+	;;
+#
+# Date start
+#
+	a)
+		DATESTART=$OPTARG
+	;;
+#
+# Date stop
+#
+	b)
+		DATESTOP=$OPTARG
+	;;
+#
+# Infile
+#
+	f)
+		INFILE=$OPTARG
+	;;
+#
+# Summation time
+#
+	s)
+		TIMEP=$OPTARG
+	;;
+#
+# File prefix
+#
+	p)
+		FILEPRE=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of INFILE
+#
+if [ $INFILE != "-" ]
+then
+ if [ ! -r "$INFILE" ]
+ then
+  echo "ERROR : File $INFILE does not exist or cannot be opened"
+  EXITSTAT=3
+ _exit $EXITSTAT
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

@@ -1,0 +1,118 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Added version numbers		1.1     14 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#
+echo "HW-ADDRESS DEVICE-FILE HW-DESCRIPTION"
+#
+HPUXVER=`cat HPUXVER.inf`
+#
+for tpe_id in `cat iotpe.db | grep -v "^#" | cut -d "," -f1`
+do
+ dev=`cat iotpe.db | awk -F "," -v TPEID=$tpe_id '{if ($1 == TPEID) print $2}'`
+ scsidev_ids=`cat iotpe.db | awk -F "," -v TPEID=$tpe_id '{if ($1 == TPEID) print $3}'`
+ for scsidev_id in $scsidev_ids
+ do
+  if [ "$HPUXVER" = "10" ]
+  then
+   IOTAPE="iotape.db"
+  else
+   IOTAPE="iotape_drive.db"
+  fi
+  scsidev=`cat $IOTAPE | awk -F "," -v SCSIID=$scsidev_id '{if ($1 == SCSIID) print $2}'`
+  scsidesc=`cat $IOTAPE | awk -F "," -v SCSIID=$scsidev_id '{if ($1 == SCSIID) print $3}'`
+#
+  echo "$scsidev , $dev , $scsidesc"
+#
+ done
+#
+done
+
+ RETSTAT=0
+}
+
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-V Version]"
+set -- `getopt V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit OK
+#
+_exit $EXITSTAT
+#

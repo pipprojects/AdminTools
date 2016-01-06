@@ -1,0 +1,398 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    doreport initial version	2.3     14 Apr 1998
+#
+# Rob Dancer    Automatic (for cron) or manual	2.4     16 Apr 1998
+#		The LASTTIME and THISTIME
+#		variables are in US format for
+#		ebreport
+#
+# Rob Dancer    -o option for outfile		2.5     20 Apr 1998
+#
+# Rob Dancer    Fixes problem with -o		2.6     22 Apr 1998
+#
+# Rob Dancer   Change MAILREC variable		3.0     27 Apr 1998
+#
+# Rob Dancer   awk changed for $AWK		3.1     11 May 1998
+#
+VERSION="3.1, 11 May 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ if [ -f "$TMPFILE1" ]
+ then
+  rm $TMPFILE1
+ fi
+ if [ -f "$TMPFILE2" ]
+ then
+  rm $TMPFILE2
+ fi
+ if [ -f "$REPORTTMPFILE1" ]
+ then
+  rm $REPORTTMPFILE1
+ fi
+ if [ -f "$REPORTTMPFILE2" ]
+ then
+  rm $REPORTTMPFILE2
+ fi
+ exit $1
+}
+#
+# Function to generate report
+#
+function _report {
+ TEMPLATE=$1
+ OUTFILE=$2
+#
+# Get last time for this template
+#
+ if [ -f "$LASTTIMEFILE" ]
+ then
+  LASTTIME=`cat $LASTTIMEFILE | $AWK -F "|" '{
+		 if ( $1 == "'$TEMPLATE'" ) {
+		  print $2
+		 }
+		}'`
+ else
+  > $LASTTIMEFILE
+  LASTTIME=""
+ fi
+ if [ -z "$LASTTIME" ]
+ then
+  SINCE=""
+  LAST=""
+ else
+  SINCE="-since"
+  LAST="\"$LASTTIME\""
+ fi
+#
+# Make the backup report
+#
+ echo "**Making report $TEMPLATE"
+ eval ${EBDIR}/ebreport history -template $TEMPLATE -size $SINCE $LAST > $REPORTTMPFILE1 2>$TMPFILE1
+#
+# Get this time and put in file. This is in US format for ebreport
+#
+ THISTIME=`date '+%m/%d/%y %H:%M'`
+ cat $LASTTIMEFILE | $AWK -F "|" 'BEGIN{
+			 THISTIME="'"$THISTIME"'"
+			 DONE="FALSE"
+			 TEMPLATE="'$TEMPLATE'"
+			}{
+			 if ( $1 == TEMPLATE ) {
+			  TIME=THISTIME
+			  DONE="TRUE"
+			 } else {
+			  TIME=$2
+			 }
+			 printf "%s|%s\n",$1,TIME
+			}END{
+			 if ( DONE != "TRUE" ){
+			  printf "%s|%s\n",TEMPLATE,THISTIME
+			 }
+			}' > $TMPFILE3
+ cp $TMPFILE3 $LASTTIMEFILE
+ chmod 640 $LASTTIMEFILE
+ chown root:root $LASTTIMEFILE
+ rm $TMPFILE3
+#
+ if [ -n "`cat $TMPFILE1`" ]
+ then
+  echo "Errors for report $TEMPLATE" >$TMPFILE2
+  cat $TMPFILE1 >>$TMPFILE2
+  echo "*************************************************************" >>$TMPFILE2
+#
+# Mail or print to screen
+#
+  if [ "$MAILTO" = "YES" ]
+  then
+   echo "Mailing report $TEMPLATE Errors"
+   echo "Subject: $TEMPLATE ebreport errors" | cat - $TMPFILE2 | mail $MAILREC
+   echo "Mail errors to $MAILREC"
+  else
+   echo "$TEMPLATE Errors"
+   eval cat $TMPFILE2 >${ERRFILE}
+  fi
+ fi
+#
+# Format the report
+#
+ echo "**Formatting report $TEMPLATE"
+ formatrep -f $REPORTTMPFILE1 > $REPORTTMPFILE2
+#
+#
+# Mail or print to screen
+#
+ if [ "$MAILTO" = "YES" ]
+ then
+  echo "Mailing report $TEMPLATE"
+  echo "Subject: $TEMPLATE" | cat - $REPORTTMPFILE2 | mail $MAILREC
+  echo "Mail to $MAILREC"
+ else
+  echo "Report $TEMPLATE"
+  eval cat $REPORTTMPFILE2 >${OUTFILE}
+ fi
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+let "NUM=0"
+let "MINSET=NUM"
+for line in `cat $EBCFGFILE | grep -v "^#" | sed -e s/"[	 ]"/" "/g -e s/"  *"/""/g -e /"^$"/d`
+do
+ SYSTEM[$NUM]=$line
+ let "NUM=NUM+1"
+done
+let "NUMSET=NUM"
+let "MAXSET=NUMSET-1"
+#
+# Process reports
+#
+let "NUMBER=0"
+while [ $NUMBER -lt NUMSET ]
+do
+#
+# Manual mode
+#
+ if [ "$AUTOMATIC" = "NO" ]
+ then
+  NUM=0
+  while [ $NUM -lt NUMSET ]
+  do
+   echo "${NUM}) ${SYSTEM[${NUM}]}"
+   let "NUM=NUM+1"
+  done
+  echo "Press <return> to do next set of reports -"
+  echo "${SYSTEM[${NUMBER}]}"
+  echo "or enter number ($MINSET to $MAXSET). q to quit"
+  echo "> \c"
+  read KEY
+  if [ -n "$KEY" ]
+  then
+   EXIT="FALSE"
+   case $KEY in
+	 Q|q) EXIT="TRUE"
+	 ;;
+	 *)
+	 ;;
+   esac
+   NUMBER=`echo $KEY | $AWK '{print int($1)}'`
+  fi
+#
+# Automatic mode
+#
+ else
+#
+  echo "\c"
+#
+ fi
+#
+#
+#
+ if [ "$EXIT" = "TRUE" ]
+ then
+  let "NUMBER=NUMSET"
+ else
+  #echo $NUMBER
+  for REPORT in `echo ${SYSTEM[${NUMBER}]} | sed -e s/":"/" "/g`
+  do
+   echo "****Report for $REPORT"
+   if [ "$BASEOUTFILE" != "&1" ]
+   then
+    OUTFILE="${BASEOUTFILE}_${REPORT}"
+    ERRFILE="${BASEOUTFILE}_ERR_${REPORT}"
+   else
+    OUTFILE=""
+    ERRFILE=""
+   fi
+   _report $REPORT $OUTFILE
+  done
+ fi
+ let "NUMBER=NUMBER+1"
+done
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+#AWK="nawk"
+#LOCALETC="../etc"
+MAILFILE="${LOCALETC}/mailto.cfg"
+EBCFGFILE="${LOCALETC}/ebtemplates.cfg"
+LASTTIMEFILE="${LOCALETC}/reportlast.inf"
+EBDIR="/usr/epoch/EB/bin"
+MAILTO="NO"
+AUTOMATIC="NO"
+BASEOUTFILE="&1"
+LASTTIME=""
+TMPFILE1="/tmp/tmpfile1.$$"
+TMPFILE2="/tmp/tmpfile2.$$"
+TMPFILE3="/tmp/tmpfile3.$$"
+REPORTTMPFILE1="/tmp/tmpreport1.$$"
+REPORTTMPFILE2="/tmp/tmpreport2.$$"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-t mail_list_file] [-m y|n] [-a y|n] [-o file] [-V Version]"
+set -- `getopt m:t:a:o:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Specify other mailto file
+#
+        -t)
+                MAILFILE=$2
+                shift 2
+        ;;
+#
+# Mail to (y) or stdout (n)
+#
+	-m)
+		MAILTO=$2
+		shift 2
+	;;
+#
+# Automatic (y) or manual (n)
+#
+	-a)
+		AUTOMATIC=$2
+		shift 2
+	;;
+#
+# Specify other mailto file
+#
+        -o)
+                BASEOUTFILE=$2
+                shift 2
+        ;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Set up mail receipients
+#
+if [ -r ${MAILFILE} ]
+then
+ MAILREC="`cat $MAILFILE | grep -v "^#"`"
+else
+ MAILREC="root@localhost"
+fi
+#
+# Check if mailing or printing to screen
+#
+if [ "$MAILTO" != "NO" ]
+then
+ TMPM=`echo $MAILTO | $AWK '{print toupper($0)}'`
+ case $TMPM in
+	Y|YES)
+		MAILTO="YES"
+	;;
+	N|NO)
+		MAILTO="NO"
+	;;
+	*)
+		echo "ERROR : Invalid parameter to mailto (-m)"
+		echo $USAGE
+		EXITSTATUS=3
+		_exit $EXITSTATUS
+	;;
+ esac
+fi
+#
+# Check if automatic or manual mode
+#
+if [ "$AUTOMATIC" != "NO" ]
+then
+ TMPM=`echo $AUTOMATIC | $AWK '{print toupper($0)}'`
+ case $TMPM in
+	Y|YES)
+		AUTOMATIC="YES"
+	;;
+	N|NO)
+		AUTOMATIC="NO"
+	;;
+	*)
+		echo "ERROR : Invalid parameter to automatic (-a)"
+		echo $USAGE
+		EXITSTATUS=4
+		_exit $EXITSTATUS
+	;;
+ esac
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

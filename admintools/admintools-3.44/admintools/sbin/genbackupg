@@ -1,0 +1,61 @@
+#!/bin/ksh
+#
+
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Create graph file function
+#
+function _createGraph {
+
+cat /etc/mnttab | awk '{print "i "$2}' > $BACKUPGRAPH
+cat $BACKUPGRAPH
+mbbgraph -g $BACKUPGRAPH
+
+}
+#
+#Start here
+#
+TMPFILE="/tmp/backup.list.$$"
+BACKUPGRAPH=$TMPFILE
+#
+# Get command line options
+#
+USAGE="$0 [-b backup_graph_file]"
+set -- `getopt b: $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+ _exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Specify backup graph file
+#
+        -b)
+                BACKUPGRAPH=$2
+                shift 2
+        ;;
+        --)
+                shift
+                break
+        ;;
+ esac
+done
+#
+_createGraph
+#
+# Remove temporary file if it exists
+#
+if [ -f $TMPFILE ]
+then
+ rm $TMPFILE
+fi
+
+

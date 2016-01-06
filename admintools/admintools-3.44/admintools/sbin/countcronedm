@@ -1,0 +1,210 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add default -f FILE option	2.3     22 Apr 1998
+#
+# Rob Dancer    Change getopt to getopts	2.4     23 Apr 1998
+#
+# Rob Dancer    countcronedm			3.0     02 Jun 1998
+#
+# Rob Dancer    Check to see if numertimes file 3.1     04 Jun 1998
+#		exists
+#
+VERSION="3.1, 04 Jun 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ if [ -f $TMPFILE1 ]
+ then
+  rm $TMPFILE1
+ fi
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+EDM="edm${EDM}"
+MAXNUMTIMES=3
+#
+COUNTFILE=${LOCALETC}/countitems${EDM}.log
+PROFILE=${LOCALETC}/${EDM}profile.cfg
+MAILFILE=${LOCALETC}/ecmailto.cfg
+MAILREC=$(cat $MAILFILE | grep -v "^#")
+NUMTIMESFILE=${LOCALETC}/numtimes${EDM}.log
+EDMPATROLFILE="/var/adm/edmcount.log"
+WARNINGFILE="${LOCALETC}/edmcountwarnings.cfg"
+#
+if [ ! -r $NUMTIMESFILE ]
+then
+ for entry in `cat $WARNINGFILE | cut -d "|" -f1`
+ do
+  echo "${entry}:0" >> $NUMTIMESFILE
+ done
+fi
+#
+# Get message counts
+#
+for entry in `cat $NUMTIMESFILE`
+do
+ NUM=$(echo $entry | cut -d ":" -f1)
+ NUMTIMESS[$NUM]="0"
+ NUMTIMESR[$NUM]=$(echo $entry | cut -d ":" -f2)
+done
+#
+countitems -f $COUNTFILE
+tail -1 $COUNTFILE | checkedmcount -p $PROFILE > $TMPFILE1
+#
+# Check for messages
+#
+NUMLINES=$(cat $TMPFILE1 | wc -l)
+if [ $NUMLINES -ne 0 ]
+then
+ echo "Subject: ${EDM} item count warning" | cat - $TMPFILE1 | mail $MAILREC
+ ln=0
+ while [ $ln -lt $NUMLINES ]
+ do
+  let "ln=ln+1"
+  MESSAGE=$(cat $TMPFILE1 | sed -e ${ln}p -n)
+  MATCH=$(echo "$MESSAGE" | cut -d "-" -f1)
+  MESSGN=$(grep "$MATCH" $WARNINGFILE | cut -d "|" -f1)
+  NUMTIMES=${NUMTIMESR[$MESSGN]}
+  let "NUMTIMES=NUMTIMES+1"
+  if [ $NUMTIMES -ge MAXNUMTIMES ]
+  then
+   echo "`date` $MESSAGE" >> $EDMPATROLFILE
+   NUMTIMES="0"
+  fi
+  NUMTIMESS[$MESSGN]=$NUMTIMES
+ done
+#
+else
+ if [ -f $NUMTIMESFILE ]
+ then
+  rm $NUMTIMESFILE
+ fi
+ i=0
+ while [ i -lt $NUM ]
+ do
+  let "i=i+1"
+  echo "$i:0" >> $NUMTIMESFILE
+ done
+fi
+#
+# Get message counts
+#
+if [ -f $NUMTIMESFILE ]
+then
+ rm $NUMTIMESFILE
+fi
+i=0
+while [ i -lt $NUM ]
+do
+ let "i=i+1"
+ echo "$i:${NUMTIMESS[$i]}" >> $NUMTIMESFILE
+done
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+EDM=""
+TMPFILE1="/tmp/tmpfile1.$$"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -e edm [-V Version]"
+while getopts e:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# EDM number
+#
+	e)
+		EDM=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check bounds of EDM
+#
+if [ -z "$EDM" ]
+then
+ echo "ERROR : EDM needs a value (1,2,3 etc)"
+ SHOWVERSION="TRUE"
+fi
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

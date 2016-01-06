@@ -1,0 +1,160 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Added version numbers		1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Removed awk analysis and	2.1     19 May 1999
+#		repalced with cut and paste
+#
+VERSION="2.1, 19 May 1999"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ TMPFILE1="/tmp/tmpfile1_$$.tmp"
+ TMPFILE2="/tmp/tmpfile2_$$.tmp"
+ TMPFILE3="/tmp/tmpfile3_$$.tmp"
+ > $TMPFILE1
+ > $TMPFILE2
+ > $TMPFILE3
+ NUMROWF=`cat $FILE | wc -l`
+ let "TAILFILE=NUMROWF-1"
+ cat $FILE | head -1 | sed -e s/" * "/","/g > $TMPFILE1
+ cat $FILE | tail -${TAILFILE} | sed -e s/" *, *"/","/g >> $TMPFILE1
+ MAXCOLS=9
+#
+ let "i=1"
+ while [ $i -le $MAXCOLS ]
+ do
+  CWCN[${i}]=$(cat $TMPFILE1 | cut -d "," -f${i} | awk 'BEGIN{MAXLEN=0}{LEN=length($0); if ( LEN > MAXLEN ){MAXLEN=LEN}}{print MAXLEN}' | tail -1)
+  let "i=i+1"
+ done
+#
+ let "i=1"
+ while [ $i -le MAXCOLS ]
+ do
+  CWCL=${CWCN[$i]}
+  cat $TMPFILE1 | cut -d "," -f${i} | awk 'BEGIN{SPACE=" ";LMAX='"$CWCL"'}{
+			   SPACES=""
+			   FNUM=$1
+			   LENTRY=length(FNUM)
+			   NUMSPACES=LMAX-LENTRY
+			   for (n=1;n<=NUMSPACES;n++){
+			    SPACES=SPACES SPACE
+			   }
+			   printf "%s%s\n",FNUM,SPACES
+			  }' | paste -d " " $TMPFILE2 - > $TMPFILE3
+  cp $TMPFILE3 $TMPFILE2
+  let "i=i+1"
+ done
+ cat $TMPFILE2
+ rm $TMPFILE1
+ rm $TMPFILE2
+ rm $TMPFILE3
+#
+ RETSTAT=0
+}
+
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+FILE=""
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -f filename [-V Version]"
+set -- `getopt f:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Get filename
+#
+	-f)
+		FILE=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Check bounds of OPTION
+#
+if [ -z "$FILE" ]
+then
+ echo "ERROR : Invalid filename"
+ _exit 1
+else
+ if [ ! -r "$FILE" ]
+ then
+  echo "ERROR : File $FILE is not readable or does not exists"
+  _exit 3
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

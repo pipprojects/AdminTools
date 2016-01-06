@@ -1,0 +1,140 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    killproc			2.2     18 Dec 1997
+#
+VERSION="2.2, 18 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+PROCS=`ps -ef | awk -v PN=${PN} '{if ( $2 == PN ) {print $2":"$3}}'`
+PID=`echo $PROCS | cut -d ":" -f1`
+PPID=`echo $PROCS | cut -d ":" -f2`
+if [ $PPID -le 1 ]
+then
+ echo "ERROR : You cannot kill system processes"
+ RETSTAT=5
+else
+#
+# Set up return status
+#
+ RETSTAT=0
+#
+fi
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+PROCNUM=""
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -p proc_num [-V Version]"
+set -- `getopt p:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Option
+#
+	-p)
+		PROCNUM=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check bounds of PROCNUM
+#
+PN=`echo $PROCNUM | awk '{print int($1)}'`
+PNOK="FALSE"
+echo $PN
+if [ -n "$PN" ]
+then
+ if [ $PN -ge 0 -a $PN -le 65535 ]
+ then
+  PNOK="TRUE"
+ fi
+fi
+if [ $PNOK = "FALSE" ]
+then
+ echo "ERROR : Invalid process number - $PN"
+ SHOWVERSION="TRUE"
+ EXITSTAT=4
+else
+ PROCNUM=$PN
+fi
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

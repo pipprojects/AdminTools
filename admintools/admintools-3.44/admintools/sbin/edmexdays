@@ -1,0 +1,297 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add default -f FILE option	2.3     22 Apr 1998
+#
+# Rob Dancer    Change getopt to getopts	2.4     23 Apr 1998
+#
+# Rob Dancer    edmexdays			3.0     06 May 1998
+#
+# Rob Dancer    caljul changed			3.1	11 May 1998
+#
+# Rob Dancer    Year format changed		3.2	11 May 1998
+#
+# Rob Dancer    awk changed for $AWK		3.3	11 May 1998
+#
+# Rob Dancer    Star tand stop changed		3.4	12 May 1998
+#
+VERSION="3.4, 12 May 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+cat $COUNTFILE | $AWK 'BEGIN{
+			 DATEPRE="1/1/1900"
+			 TIMEPRE="00:00:00"
+			 TIMESTART="'"$TIMESTART"'"
+			 TIMESTOP="'"$TIMESTOP"'"
+			 HHS=substr(TIMESTART,1,2)
+			 MMS=substr(TIMESTART,4,2)
+			 SSS=substr(TIMESTART,7,2)
+			 HHF=substr(TIMESTOP,1,2)
+			 MMF=substr(TIMESTOP,4,2)
+			 SSF=substr(TIMESTOP,7,2)
+			 DATEEX="'"$DATEEX"'"
+			 if ( DATEEX == "ALL" ) {
+			  DATESALL="TRUE"
+			 } else {
+			  DATESALL="FALSE"
+			 }
+			 DD=substr(DATEEX,1,2)
+			 MM=substr(DATEEX,4,2)
+			 LENDATE=length(DATEEX)
+			 SEP1=index(DATEEX,"/")
+			 SEP2=index(substr(DATEEX,SEP1+1,LENDATE-SEP1),"/")+SEP1
+			 YEAR=substr(DATEEX,SEP2+1,LENDATE-SEP2)
+			 LENYEAR=length(YEAR)
+			 YY=substr(YEAR,LENYEAR-1,2)
+			 DATEEX=DD"/"MM"/"YY
+			 FILEPRE="'"$COUNTFILE"'"
+			 PRINTLINE="FALSE"
+			 PARAM1=""
+			 PARAM2=""
+			 OKSTOP="FALSE"
+			 START="FALSE"
+			 STOP="FALSE"
+			} {
+			 DATE=$1
+			 TIME=$2
+			 PARAM1=$3
+			 if ( NF > 3 ) {
+			  PARAM2=$4
+			 } else {
+			  PARAM2=0
+			 }
+			 if ( DATE != DATEPRE ) {
+			  if ( PRINTLINE == "TRUE" ) {
+			   OKSTOP="TRUE"
+			  }
+			 }
+			 if ( DATESALL == "TRUE" ) {
+			  DATEEX=DATE
+			 }
+			 if ( DATEEX == DATE ) {
+			  HHC=substr(TIME,1,2)
+			  MMC=substr(TIME,4,2)
+			  SSC=substr(TIME,7,2)
+			  if ( START != "TRUE" ) {
+			   if ( HHC > HHS ) {
+			    START="TRUE"
+			   } else {
+			    if ( HHC == HHS ) {
+			     if ( MMC > MMS ) {
+			      START="TRUE"
+			     } else {
+			      if ( MMC == MMS ) {
+			       if ( SSC >= SSS ) {
+			        START="TRUE"
+			       }
+			      }
+			     }
+			    }
+			   }
+			  }
+			  if ( START == "TRUE" ) {
+			   DD=substr(DATE,1,2)
+			   MM=substr(DATE,4,2)
+			   LENDATE=length(DATE)
+			   SEP1=index(DATE,"/")
+			   SEP2=index(substr(DATE,SEP1+1,LENDATE-SEP1),"/")+SEP1
+			   YEAR=substr(DATE,SEP2+1,LENDATE-SEP2)
+			   LENYEAR=length(YEAR)
+			   YY=substr(YEAR,LENYEAR-1,2)
+			   EXT=DD MM YY
+			   FILE=FILEPRE"."EXT
+			   printf "" > FILE
+			   PRINTLINE="TRUE"
+			   OKSTOP="FALSE"
+			  }
+			 }
+			 HHC=substr(TIME,1,2)
+			 MMC=substr(TIME,4,2)
+			 SSC=substr(TIME,7,2)
+			 if ( OKSTOP == "TRUE" ) {
+			  if ( STOP != "TRUE" ) {
+			   if ( HHC > HHF ) {
+			    STOP="TRUE"
+			   } else {
+			    if ( HHC == HHF ) {
+			     if ( MMC > MMF ) {
+			      STOP="TRUE"
+			     } else {
+			      if ( MMC == MMF ) {
+			       if ( SSC >= SSF ) {
+			        STOP="TRUE"
+			       }
+			      }
+			     }
+			    }
+			   }
+			  }
+			 }
+			 if ( PRINTLINE == "TRUE" ) {
+			  printf "%s,%s,%s,%s\n",DATE,TIME,PARAM1,PARAM2 >> FILE
+			 }
+			 if ( STOP == "TRUE" ) {
+			  if ( OKSTOP == "TRUE" ) {
+			   PRINTLINE="FALSE"
+			  }
+			 }
+			 DATEPRE=DATE
+			 TIMEPRE=TIME
+			}'
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+COUNTFILE="countitems.log"
+DATEEX="ALL"
+TIMESTART="21:00:00"
+TIMESTOP="05:55:00"
+OPTION=""
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-d date] [-f file] [-V Version]"
+while getopts d:f:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Date
+#
+	d)
+		DATEEX=$OPTARG
+	;;
+#
+# File
+#
+	f)
+		COUNTFILE=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of DATEEX
+#
+if [ -z "$DATEEX" ]
+then
+ echo "ERROR : Invalid date - $DATEEX"
+ _exit 1
+else
+ DE=`echo $DATEEX | $AWK '{print toupper($0)}'`
+ case $DATEEX in
+	ALL)
+		DATEEX=$DE
+	;;
+	YESTERDAY)
+		DATE="`date '+%d/%m/%y'`"
+		JN=`caljul -d "${DATE}" | $AWK '{print $1}'`
+		let "JNY=JN-1"
+		YR=`echo $DATE | $AWK -F "/" '{print $3}'`
+		DATEEX=`caljul -j "${JNY} ${YR}"`
+	;;
+	*)
+	;;
+ esac
+fi
+#
+# Check bounds of COUNTFILE
+#
+if [ -z "$COUNTFILE" ]
+then
+ echo "ERROR : Filename required"
+ echo "$USAGE"
+ EXITSTAT=2
+ _exit $EXITSTAT
+else
+ if [ "$COUNTFILE" != "-" ]
+ then
+  if [ ! -r "$COUNTFILE" ]
+  then
+   echo "ERROR : File $FILE does not exist or cannot be opened"
+   EXITSTAT=3
+  _exit $EXITSTAT
+  fi
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

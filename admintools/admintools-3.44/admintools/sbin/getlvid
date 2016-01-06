@@ -1,0 +1,43 @@
+#!/bin/ksh
+#
+
+echo "#LV_ID,LVNAME,MOUNTPOINT,MIRRORCOPIES,FILESYSTEMTYPE"
+echo "#=====,======,==========,============,=============="
+#
+let "lv_id=10000"
+for lv in `vgdisplay -v /dev/vg*| grep "LV Name" | awk '{print $3}'`
+do
+ case $HPUXVER in
+        10)
+		#mp=`grep "^$lv" /etc/fstab | awk '{print $2}'`
+		#fst=`grep "^$lv" /etc/fstab | awk '{print $3}'`
+		mp=`grep "^$lv[	 ]" /etc/mnttab | awk '{print $2}'`
+		fst=`grep "^$lv[	 ]" /etc/mnttab | awk '{print $3}'`
+        ;;
+        09)
+		mp=`grep "^$lv" /etc/checklist | awk '{print $2}'`
+		fst=`grep "^$lv" /etc/checklist | awk '{print $3}'`
+        ;;
+        *)
+                echo "ERROR : HPUXVER not set"
+                exit 1
+ esac
+# Check for device swap NOT fs swap
+ if [ "$fst" = "swap" -o -z "$fst" ]
+ then
+  lvC=`echo $lv | sed -e s@"\/"@"\\\\\/"@g`
+  SWAP=`swapinfo -t | awk '{if ( $9 ~ /^'"$lvC"'$/ ) print $2}'`
+  if [ -n "$SWAP" ]
+  then
+   if [ "$fst" != "swapfs" ]
+   then
+    fst="swap"
+    mp="swap"
+   fi
+  fi
+ fi
+ mc=`lvdisplay $lv | grep "Mirror copies" | awk '{print $3}'`
+ let "lv_id=lv_id+1"
+ echo "$lv_id,$lv,$mp,$mc,$fst"
+done
+

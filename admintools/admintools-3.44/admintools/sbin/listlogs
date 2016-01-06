@@ -1,0 +1,189 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add default -f FILE option	2.3     22 Apr 1998
+#
+# Rob Dancer    Change getopt to getopts	2.4     23 Apr 1998
+#
+# Rob Dancer    listlogs			3.0     23 Apr 1998
+#
+VERSION="3.0, 23 Apr 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ ls ${LOGFILE}.??-?? | $AWK 'BEGIN {
+				 DAYSTART="'"$STARTD"'"
+				 MONTHSTART="'"$STARTM"'"
+				 START="FALSE"
+				} {
+				 MONTH=substr($0,length($0)-1,2)
+				 DAY=substr($0,length($0)-4,2)
+				 if ( MONTH > MONTHSTART ) {
+				  START="TRUE"
+				 } else {
+				  if ( MONTH == MONTHSTART ) {
+				   if ( DAY > DAYSTART ) {
+				    START="TRUE"
+				   } else {
+				    if ( DAY == DAYSTART ) {
+				     START="TRUE"
+				    }
+				   }
+				  }
+				 }
+				 if ( START == "TRUE" ) {
+				  print $0
+				  START="FALSE"
+				 }
+				}'
+echo $LOGFILE
+#
+#
+#
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+DATES="01/01"
+FILE="."
+LOGDIR="/ep_home/epoch/EB/log"
+LFILE="backups.log"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-a date] [-d directory] [-l file] [-V Version]"
+while getopts a:d:l:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Option
+#
+	a)
+		DATES=$OPTARG
+	;;
+#
+# Log directory
+#
+	d)
+		LOGDIR=$OPTARG
+	;;
+#
+# Log file
+#
+	l)
+		LFILE=$OPTARG
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of DATES
+#
+if [ -z "$DATES" ]
+then
+ echo "ERROR : Invalid option - $DATES"
+ _exit 1
+fi
+STARTD=`echo "$DATES" | cut -d "/" -f1`
+STARTM=`echo "$DATES" | cut -d "/" -f2`
+#
+# Check existance of log directory
+#
+if [ ! -r "$LOGDIR" ]
+then
+ echo "ERROR : Unable to open log directory ${LOGDIR}"
+ EXITSTATUS=3
+ _exit $EXITSTATUS
+fi
+#
+LOGFILE="${LOGDIR}/${LFILE}"
+#
+# Check existance of log file
+#
+if [ ! -r "$LOGFILE" ]
+then
+ echo "ERROR : Unable to open log file ${LOGFILE}"
+ EXITSTATUS=4
+ _exit $EXITSTATUS
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

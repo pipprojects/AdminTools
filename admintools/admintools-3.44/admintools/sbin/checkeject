@@ -1,0 +1,74 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version                 1.0     13 Oct 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+TAPEDEVICES="$1"
+#
+# Source file with eject information
+#
+. /etc/admintools.src
+. ${ADMINTOOLSETC}/checkeject.src
+#
+# Get day of week (in upper case) and 24 hour hour
+#
+DAY=`date '+%a' | awk '{print toupper($0)}'`
+HOUR=`date '+%H'`
+DAYFULL=`date '+%A'`
+#++
+# TEST day and hour
+#
+#echo "DAYFULL > \c"
+#read DUM
+#DAYFULL=`echo $DUM | awk '{print toupper($0)}'`
+#DAY=`echo $DAYFULL | cut -c 1-3`
+#echo "HOUR (24) > \c"
+#read HOUR
+#echo "DAY=$DAY"
+#echo "HOUR=$HOUR"
+#--
+
+for WD in MON TUE WED THU FRI SAT SUN
+do
+ num=0
+ for i in 0 1
+ do
+  let "num=num+i"
+  VAR="\${$WD[$i]}"
+  WEEKDAY[$num]=`eval "echo $VAR"`
+ done
+ let "num=num+1"
+done
+
+if [ $HOUR -lt $AMPMDEF ]
+then
+ AMPM=$AM
+else
+ AMPM=$PM
+fi
+
+VAR="\${$DAY[$AMPM]"
+echo "$DAYFULL ${AMPMTEXT[$AMPM]} - \c"
+if [ `eval echo $VAR` = $EJECT ]
+then
+ echo "Eject tape"
+ TAPEDEV="/dev/rmt/0m"
+ for tapedevice in $TAPEDEVICES
+ do
+  echo "mt -t $tapedevice offl"
+  mt -t $tapedevice offl
+ done
+else
+ echo "Do not eject tape"
+fi
+

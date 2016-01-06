@@ -1,0 +1,24 @@
+#*************************************************************************************************
+# /etc/phonenumbers
+#
+# Rob Dancer	01 November 1999	V1.0	Initial Version
+#
+#*************************************************************************************************
+#
+# This file is used to translate telephone names to numbers for the Orange messaging service
+#
+# The format is 
+#
+# msisdn	name	[alias1	[alias	[alias...]]]
+#
+# The separator is white space. There can be a space at the beginning of the line
+# Lines beginning a with a hash (#) are comment lines
+# The first instance of the name is used
+# All text after a hash is a comment
+# If the number starts with a 0, the international code for the UK is used (44)
+# International codes can be used.
+#
+#*************************************************************************************************
+#
+07000000000 first.last	first_last	firstlast
+#

@@ -1,0 +1,56 @@
+#
+#*****************************************************************************
+#
+# This file should be sourced to get definitions for backuplvs files
+#
+#*****************************************************************************
+#
+# Name		Description			Version	Date
+#
+# Rob Dancer	Initial version			1.0	13 Oct 1997
+#
+# Rob Dancer	Changed LOGDIR and TMPDIR	1.1	14 Oct 1997
+#
+# Rob Dancer	Added UNMOUNTDIRS default	2.0	08 Dec 1997
+#
+# Rob Dancer	Added MNTDIRLISTFILE default	2.1	01 Mar 1999
+#
+# Rob Dancer	Added TIMEHOST default		2.2	01 Mar 1999
+#
+#
+#
+#*****************************************************************************
+#
+# DATESTAMP should already be defined
+#
+if [ -z "$DATESTAMP" ]
+then
+ DATESTAMP="`date +'%d_%h_%Y_%H:%M:%S'`"
+fi
+#
+TAPEDEVICE="/dev/rmt/0m"
+MIRDIR="/BACKUPLVS"
+LOGDIR="$PWD"
+TMPDIR="/tmp"
+UNMOUNTDIRS="y"
+#
+BACKUPINDEX="backupindex"
+#
+CONFIGFILE="backup.conf"
+#
+GRAPHIN="backup"
+GRAPHOUT="graph"
+GRAPHFILE="backupgraph"
+EXT="list"
+#
+LVLISTFILE="lvlist"
+LVMIRLISTFILE="lvmirlist"
+MNTDIRLISTFILE="mntdirlist"
+GRAPH1="${GRAPHIN}"
+GRAPH2="${GRAPHIN}1"
+GTMP1="${GRAPHOUT}1"
+GTMP2="${GRAPHOUT}2"
+GRAPHFILE="${GRAPHFILE}"
+#
+TIMEHOST="timehost"
+#

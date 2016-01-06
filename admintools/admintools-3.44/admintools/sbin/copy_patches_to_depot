@@ -1,0 +1,162 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Create copy_patches script	2.3     06 Jan 1998
+#
+# Rob Dancer    Allows multiple patches in -p	2.4     13 Jan 1998
+#		option
+#
+# Rob Dancer    Change getopt for getopts	2.5     15 May 1998
+#
+# Rob Dancer    $2 to $OPTARG			2.6     19 May 1998
+#
+VERSION="2.6, 19 May 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#
+# Set up return status
+#
+RETSTAT=0
+#
+for patch in $PATCHES
+do
+ sh $patch
+ if [ $? = 0 ]
+ then
+  swcopy -s ${PWD}/${patch}.depot -x software=${patch} @ ${DEPOT}
+  if [ $? = 0 ]
+  then
+   rm -f ${patch}.text ${patch}.depot
+  else
+   echo "ERROR : swcopy failed"
+   RETSTAT=11
+  fi
+ else
+  echo "ERROR : Unarchiving of patch failed"
+  RETSTAT=10
+ fi
+done
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+PATCHES=""
+DEPOT="/var/spool/sw/patches.depot"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -p patches [-d depot] [-V Version]"
+while getopts p:d:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Patches
+#
+	p)
+		PATCHES="$OPTARG"
+	;;
+#
+# Depot
+#
+	d)
+		DEPOT="$OPTARG"
+	;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of PATCHES
+#
+if [ -z "$PATCHES" ]
+then
+ echo "ERROR : No patches specified"
+ _exit 1
+else
+ PATCHES=$PATCHES
+fi
+#
+# Check for existence of depot
+#
+if [ ! -d "$DEPOT" ]
+then
+ echo "ERROR : Depot $DEPOT does not exist as a directory"
+ _exit 3
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

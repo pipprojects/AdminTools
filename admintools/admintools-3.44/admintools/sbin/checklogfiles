@@ -1,0 +1,113 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version                 1.0     11 Nov 1997
+#
+# Rob Dancer    Added version numbers		1.1     17 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _checkLogFile {
+ find /var/adm/diag -name "LOG*" -mtime -${NUMBERDAYS} -exec ls -ald {} \;
+ RETSTAT=0;
+}
+
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+NUMBERDAYS="1"
+MINN=0
+MAXN=10
+#
+# Get command line options
+#
+USAGE="$0 [-n number_of_days] [-V Version]"
+set -- `getopt n:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Number of days back to look at logs
+#
+	-n)
+		NUMBERDAYS=$2
+		shift 2
+	;;
+#
+# Show version
+#
+        -V)
+                SHOWVERSION="TRUE"
+                shift 1
+        ;;
+
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Make number of days an integer
+#
+VALUE=`echo "$NUMBERDAYS" | awk '{print int($1)}'`
+#
+# Check bounds of number of days
+#
+if [ "$NUMBERDAYS" -lt "$MINN" -o "$NUMBERDAYS" -gt "$MAXN" ]
+then
+ echo "ERROR : Invalid number of days - $NUMBERDAYS ($MINN to $MAXN)"
+ _exit 1
+else
+ NUMBERDAYS=$VALUE
+fi
+#
+# Check the log files
+#
+_checkLogFile
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit OK
+#
+_exit $EXITSTAT
+#

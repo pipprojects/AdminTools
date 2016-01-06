@@ -1,0 +1,8 @@
+FILE=$1
+NUM=`cat $FILE | wc -l`
+i=$NUM
+while [ $i -ge 1 ]
+do
+ sed -e ${i}p -n $FILE
+ let "i=i-1"
+done

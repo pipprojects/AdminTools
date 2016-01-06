@@ -1,0 +1,550 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Added version number		1.2     18 Nov 1997
+#
+# Rob Dancer    Added crontab information	1.3     19 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Add nsswitch			2.1     13 Sep 1999
+#
+# Rob Dancer    Check for host type 		2.2     13 Sep 1999
+#
+# Rob Dancer    Add more info for Sun		2.3     14 Sep 1999
+#
+# Rob Dancer    vg mapfile and vg group file	2.4	16 Sep 1999
+#
+# Rob Dancer    /etc/services and /etc/group	2.5	25 Sep 1999
+#		added
+#
+# Rob Dancer    Get real time in file		2.6	08 Dec 1999
+#
+# Rob Dancer    Spelling mistake in getcs "-"	2.7	30 Jan 2001
+#
+# Rob Dancer    Corrected mapfile vgXX		2.8	31 Jan 2001
+#		duplication
+#
+# Rob Dancer	Changed for Linux		3.0	14 Apr 2004
+#
+# Rob Dancer	Updated added redhat-release	3.1	22 June 2006
+#
+VERSION="3.1, 22 June 2006"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+Filesystem (){
+#
+# Filesystem info - bdf.ksh
+#
+ INFO="Filesystem info - bdf.ksh"
+ echo $INFO
+ FILE=bdf.ksh.${EXT}
+ bdf.ksh > $FILE
+ CSFILES="$CSFILES\n$FILE"
+ if [ $HOSTTYPE = "HP" ]
+ then
+  if [ $HPUXVER = "10" ]
+  then
+# Filesystem info - fstab
+   INFO="Filesystem info - fstab"
+   echo $INFO
+   FILE=fstab.${EXT}
+   cat /etc/fstab > $FILE
+  else
+# Filesystem info - checklist
+   INFO="Filesystem info - checklist"
+   echo $INFO
+   FILE=checklist.${EXT}
+   cat /etc/checklist > $FILE
+  fi
+ elif [ $HOSTTYPE = "SUN" ]
+ then
+# Filesystem info - vfstab
+  INFO="Filesystem info - vfstab"
+  echo $INFO
+  FILE=vfstab.${EXT}
+  cat /etc/vfstab > $FILE
+ elif [ $HOSTTYPE = "LINUX" ]
+ then
+# Filesystem info - fstab
+  INFO="Filesystem info - fstab"
+  echo $INFO
+  FILE=fstab.${EXT}
+  cat /etc/fstab > $FILE
+ fi
+ CSFILES="$CSFILES\n$FILE"
+#
+# Swap
+#
+ if [ $HOSTTYPE = "HP" ]
+ then
+# Filesystem info - swap
+  INFO="Filesystem info - swap"
+  echo $INFO
+  FILE=swapinfo.t.${EXT}
+  swapinfo -t > $FILE
+ elif [ $HOSTTYPE = "SUN" ]
+ then
+# Filesystem info - swap
+  INFO="Filesystem info - swap"
+  echo $INFO
+  FILE=swap.l.${EXT}
+  swap -l > $FILE
+ elif [ $HOSTTYPE = "LINUX" ]
+ then
+# Filesystem info - swap
+  INFO="Filesystem info - swap"
+  echo $INFO
+  FILE=swap.l.${EXT}
+  swapon -s > $FILE
+ fi
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Hosts () {
+# Hosts info
+ INFO="Hosts info"
+ echo $INFO
+ FILE=hosts.${EXT}
+ cat /etc/hosts > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Volumegroup () {
+# Volume group info
+ INFO="Volume group info - vgscan"
+ echo $INFO
+ FILE=vgscan.pv.${EXT}
+ vgscan -pv > $FILE 2> /dev/null
+ CSFILES="$CSFILES\n$FILE"
+ INFO="Volume group logical volumes"
+ echo $INFO
+ FILE="vggroup.${EXT}"
+ find /dev/vg** -name "group" -exec ls -ald {} \; > $FILE 2> /dev/nill
+ CSFILES="$CSFILES\n$FILE"
+ for vg in `cat vgscan.pv.${EXT} | grep "/dev/vg"`
+ do
+  INFO="Volume group $vg"
+  echo $INFO
+  FILE=`echo $vg | sed -e s/"\/dev\/"/""/`.${EXT}
+  vgdisplay -v $vg > $FILE
+  CSFILES="$CSFILES\n$FILE"
+# Mapfile
+  INFO="Volume group $vg mapfile"
+  echo $INFO
+  FILE=`echo $vg | sed -e s/"\/dev\/"/""/`.map.${EXT}
+  vgexport -p -v -m mapfile $vg > $FILE 2>/dev/null
+  echo "Edit this file and use the lines below as the mapfile when using vgimport" >> $FILE
+  cat mapfile >> $FILE
+  rm mapfile
+  CSFILES="$CSFILES\n$FILE"
+#
+# Logical Volume info
+  for lv in `vgdisplay -v $vg | grep "LV Name" | awk '{print $3}' | sort -u`
+  do
+   INFO="Logical volume $lv for Volume group $vg"
+   echo $INFO
+   FILE=`echo $lv | sed -e s/"\/dev\/"/""/ -e s/"\/"/"."/`.${EXT}
+   lvdisplay -v $lv > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  done
+# Physical Volume info
+  for pv in `vgdisplay -v $vg | grep "PV Name" | awk '{print $3}' | sort -u`
+  do
+   INFO="Physical volume - $pv for Volume group $vg"
+   echo $INFO
+   FILE=`echo $pv | sed -e s/"\/"/"."/g | sed -e s/"^\."//`.${EXT}
+   pvdisplay -v $pv > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  done
+#
+ done
+}
+
+System () {
+# uname
+ INFO="uname"
+ echo $INFO
+ FILE=uname.a.${EXT}
+ uname -a > $FILE
+ CSFILES="$CSFILES\n$FILE"
+ if [ $HOSTTYPE = "HP" ]
+ then
+# model
+  if [ "$HPUXVER" = "10" ]
+  then
+   INFO="model"
+   echo $INFO
+   FILE=model.${EXT}
+   model > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  fi
+ fi
+# dmesg
+ INFO="dmesg"
+ echo $INFO
+ FILE=dmesg.${EXT}
+ dmesg > $FILE
+ CSFILES="$CSFILES\n$FILE"
+# Real time
+ INFO="Real time"
+ echo $INFO
+ FILE=real_time.${EXT}
+ telnet timeserver realtime 2>/dev/null | tail -1 > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Hardware () {
+ # HW info
+ INFO="HW info"
+ echo $INFO
+ FILE=ioscan.fn.${EXT}
+ ioscan -fn > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Password () {
+# Password info
+ INFO="Password info"
+ echo $INFO
+ FILE=passwd.${EXT}
+ cat /etc/passwd > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+NISPassword () {
+# NIS Password info
+ INFO="NIS Password info"
+ echo $INFO
+ FILE=yppasswd.${EXT}
+ ypcat -k passwd > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Shadow () {
+# Shadow info
+ INFO="Shadow info"
+ echo $INFO
+ FILE=shadow.${EXT}
+ cat /etc/shadow > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+NISShadow () {
+# NIS Shadow info
+ INFO="NIS Shadow info"
+ echo $INFO
+ FILE=ypshadow.${EXT}
+ ypcat -k shadow > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Group () {
+# Group info
+ INFO="Group info"
+ echo $INFO
+ FILE=group.${EXT}
+ cat /etc/group > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+NISGroup () {
+# NIS Group info
+ INFO="NIS Group info"
+ echo $INFO
+ FILE=ypgroup.${EXT}
+ ypcat -k group > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Resolver () {
+# Resolver info
+ INFO="Resolver info"
+ echo $INFO
+ FILE=resolv.conf.${EXT}
+ cat /etc/resolv.conf > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+NetworkServices () {
+# Network Services info
+ INFO="Network Services info"
+ echo $INFO
+ FILE=nsswitch.conf.${EXT}
+ cat /etc/nsswitch.conf > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Services () {
+# Services
+ INFO="Services"
+ echo $INFO
+ FILE=services.${EXT}
+ cat /etc/services > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Lan () {
+ if [ $HOSTTYPE = "HP" ]
+ then
+# Lan info
+  INFO="Lan info"
+  echo $INFO
+  FILE=lanscan.${EXT}
+  lanscan > $FILE
+  CSFILES="$CSFILES\n$FILE"
+#
+  FILE=ifconfig.${EXT}
+  rm $FILE 2> /dev/null
+  LANS=`lanscan | egrep -v "Hardware|Path" | awk '{print $5}'`
+  for lan in  $LANS
+  do
+   ifconfig $lan >> $FILE
+  done
+  CSFILES="$CSFILES\n$FILE"
+ fi
+#
+ FILE=netstat.rn.${EXT}
+ netstat -rn >> $FILE
+ CSFILES="$CSFILES\n$FILE"
+#
+ FILE=netstat.in.${EXT}
+ netstat -in >> $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Instsw() {
+ if [ $HOSTTYPE = "HP" ]
+ then
+  if [ $HPUXVER = "10" ]
+  then
+   INFO="Swlist product info"
+   echo $INFO
+   FILE=swlist.l.prod.${EXT}
+   swlist -l product > $FILE
+   CSFILES="$CSFILES\n$FILE"
+   INFO="Swlist bundle info"
+   echo $INFO
+   FILE=swlist.l.bund.${EXT}
+   swlist -l bundle > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  else
+   INFO="Installed sw info"
+   echo $INFO
+   FILE=filesets.${EXT}
+   ls /etc/filesets > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  fi
+ elif [ $HOSTTYPE = "SUN" ]
+ then
+  INFO="Installed sw info"
+  echo $INFO
+  FILE=pkginfo.${EXT}
+  pkginfo > $FILE
+  CSFILES="$CSFILES\n$FILE"
+ elif [ $HOSTTYPE = "LINUX" ]
+ then
+  INFO="Installed sw info"
+  echo $INFO
+  FILE=rpm.${EXT}
+  rpm -qa > $FILE
+  CSFILES="$CSFILES\n$FILE"
+ fi
+}
+
+Kernel () {
+ if [ $HOSTTYPE = "HP" ]
+ then
+  if [ $HPUXVER = "10" ]
+  then
+   INFO="Kernel info"
+   echo $INFO
+   FILE=vmunix.${EXT}
+   /usr/lbin/sysadm/get_sysfile /stand/vmunix > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  else
+   INFO="Kernel info"
+   echo $INFO
+   FILE=hpux.${EXT}
+   /system/TOOL/get_kgenfile /hp-ux > $FILE
+   CSFILES="$CSFILES\n$FILE"
+  fi
+ elif [ $HOSTTYPE = "SUN" ]
+ then
+   INFO="Kernel info"
+   echo $INFO
+   FILE=system.${EXT}
+   cat /etc/system > $FILE
+   CSFILES="$CSFILES\n$FILE"
+ elif [ $HOSTTYPE = "LINUX" ]
+ then
+   INFO="Kernel info"
+   echo $INFO
+   FILE=config.${EXT}
+   cat /usr/src/linux-2.4/.config > $FILE
+   CSFILES="$CSFILES\n$FILE"
+ fi
+}
+
+Printer () {
+ INFO="Printer info"
+ echo $INFO
+ FILE=lpstat.t.${EXT}
+ lpstat -t > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Crontab () {
+ INFO="root crontab info"
+ echo $INFO
+ FILE=crontab.l.${EXT}
+ crontab -l > $FILE
+ CSFILES="$CSFILES\n$FILE"
+}
+
+Redhat-release () {
+ INFO="redhat-release"
+ echo $INFO
+ FILE=redhat-release.${EXT}
+ SFILE="/etc/redhat-release"
+ if [ -r $SFILE ]
+ then
+  cat /etc/redhat-release > $FILE
+ else
+  echo "No such file - $SFILE" > $FILE
+ fi
+ CSFILES="$CSFILES\n$FILE"
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+ if [ $HOSTTYPE = "HP" ]
+ then
+  CSLIST="Filesystem Hosts Volumegroup Hardware Password Group Resolver NetworkServices Services System Lan Instsw Kernel Printer Crontab"
+ elif [ $HOSTTYPE = "SUN" ]
+ then
+  CSLIST="Filesystem Hosts Password Group Shadow Resolver NetworkServices Services System Lan Instsw Kernel Printer Crontab"
+ elif [ $HOSTTYPE = "LINUX" ]
+ then
+  CSLIST="Filesystem Hosts Password Group Shadow Resolver NetworkServices Services System Lan Instsw Kernel Printer Crontab Redhat-release"
+ fi
+ for CONFIG in $CSLIST
+ do
+  $CONFIG
+ done
+#
+ echo $CSFILES > csfile.log
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-V Version]"
+set -- `getopt V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+FILE=""
+CSFILES=""
+CR="\n"
+EXT="inf"
+#
+OSVER=$(uname -r)
+if [ $HOSTTYPE = "HP" ]
+then
+ if [ `echo $OSVER | cut -d "." -f2` = "09" ]
+ then
+  echo "This system is running HPUX Release 9"
+  HPUXVER="09"
+ else
+  echo "This system is running HPUX Release 10"
+  HPUXVER="10"
+ fi
+ FILE="HPUXVER.${EXT}"
+ echo $HPUXVER > $FILE
+elif [ $HOSTTYPE = "SUN" ]
+then
+ echo "This system is running Solaris Release $OSVER"
+ SOLARISVER=$OSVER
+ FILE="SOLARISVER.${EXT}"
+ echo $SOLARISVER > $FILE
+elif [ $HOSTTYPE = "LINUX" ]
+then
+ echo "This system is running Linux Release $OSVER"
+ LINUXVER=$OSVER
+ FILE="LINUXVER.${EXT}"
+ echo $LINUXVER > $FILE
+fi
+CSFILES="$CSFILES\n$FILE"
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

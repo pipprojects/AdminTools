@@ -1,0 +1,391 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer    Changed spelling mistake	2.1     10 Dec 1997
+#		"exits"
+#
+# Rob Dancer    Exit with variable not		2.2     18 Dec 1997
+#		explicitly 0 when showing
+#		version
+#
+# Rob Dancer    Add default -f FILE option	2.3     22 Apr 1998
+#
+# Rob Dancer    Change getopt to getopts	2.4     23 Apr 1998
+#
+# Rob Dancer    caljul				3.0     24 Apr 1998
+#
+# Rob Dancer    Removed reference to nawk and	3.1     29 Apr 1998
+#		change leap year FEB to DAYS+1
+#
+# Rob Dancer    Check ranges of parameters	3.2     29 Apr 1998
+#
+# Rob Dancer    Input and output format		3.3     29 Apr 1998
+#
+# Rob Dancer    Problem with printf and leading	3.4     30 Apr 1998
+#		zeros
+#
+# Rob Dancer    -f option for -i and -o options	3.5     05 May 1998
+#
+# Rob Dancer    YEAR format changed		3.6     11 May 1998
+#
+VERSION="3.6, 11 May 1998"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+function _CalcLeapYear {
+ YEAR=$1
+ echo "$YEAR" | $AWK  '{YEAR=$0
+			 REMY=YEAR-(int(YEAR/4)*4)
+			 if ( REMY == 0 ) {
+			  REMD=YEAR-(int(YEAR/100)*100)
+			  if (REMD == 0 ) {
+			   REMD4=YEAR-(int(YEAR/400)*400)
+			   if ( REMD4 == 0 ) {
+			    print "TRUE"
+			   } else {
+			    print "FALSE"
+			   }
+			  } else {
+			   print "TRUE"
+			  }
+			 } else {
+			  print "FALSE"
+			 }
+			}'
+}
+#
+#
+# Calculate Julian Number
+#
+function _CalcJulNum {
+ DATE="$1"
+ CURD="`echo $DATE | $AWK -F "/" '{print int($1)}'`"
+ CURM="`echo $DATE | $AWK -F "/" '{print int($2)}'`"
+ CURY="`echo $DATE | $AWK -F "/" '{print int($3)}'`"
+#
+ LEAPYEAR="`_CalcLeapYear $CURY`"
+ if [ "$LEAPYEAR" = "TRUE" ]
+ then
+  let "MONTH[${FEB}]=${MONTH[${FEB}]}+1"
+ fi
+#
+#
+#
+ JULN=$CURD
+ let "month=CURM-1"
+ while [ $month -gt 0 ]
+ do
+  NUMDAYS=${MONTH[${month}]}
+  let "JULN=JULN+NUMDAYS"
+  let "month=month-1"
+ done
+}
+#
+#
+# Calculate date from Julian Number
+#
+function _CalcDate {
+ JULN="$1"
+ YEAR="$2"
+#
+ LEAPYEAR="`_CalcLeapYear $YEAR`"
+ if [ "$LEAPYEAR" = "TRUE" ]
+ then
+  let "MONTH[${FEB}]=${MONTH[${FEB}]}+1"
+ fi
+#
+ let "month=1"
+ let "TOT=0"
+ LOOP="TRUE"
+ while [ "$LOOP" = "TRUE" ]
+ do
+#
+# Check bound of Julian number
+#
+  if [ $month -gt $DEC ]
+  then
+   echo "ERROR : Invalid Julian Number $JULN for $YEAR"
+   EXITSTAT=2
+   _exit $EXITSTAT
+  fi
+  NUMDAYS=${MONTH[${month}]}
+  let "TOTSUB=TOT+NUMDAYS"
+  if [ $TOTSUB -ge $JULN ]
+  then
+   let "DAY=JULN-TOT"
+   let "MONTH=month"
+   LOOP="FALSE"
+  else
+   let "TOT=TOT+NUMDAYS"
+  fi
+  let "month=month+1"
+ done
+ #
+}
+#
+# Check format of year
+#
+function _GetYear {
+ YEAR="$1"
+ echo "$YEAR" | $AWK '{
+			 YEAR=$1
+			 PREFIX=""
+			 if ( YEAR >= 70 && YEAR <= 99 ) {
+			  PREFIX=19
+			 } else {
+			  if ( YEAR >= 00 && YEAR <=69 ) {
+			   PREFIX=20
+			  }
+			 }
+			 printf "%s%2.2d",PREFIX,YEAR
+			}'
+}
+#
+#
+#
+function _CheckYear {
+ YEAR="$1"
+ if [ $YEAR -lt $MINYEAR -o $YEAR -gt $MAXYEAR ]
+ then
+  echo "ERROR : Year out of range $YEAR (${MINYEAR} to ${MAXYEAR})"
+  EXITSTAT=4
+  _exit $EXITSTAT
+ fi
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#
+JAN=1
+FEB=2
+MAR=3
+APR=4
+MAY=5
+JUN=6
+JUL=7
+AUG=8
+SEP=9
+OCT=10
+NOV=11
+DEC=12
+#
+MONTH[${JAN}]=31
+MONTH[${FEB}]=28
+MONTH[${MAR}]=31
+MONTH[${APR}]=30
+MONTH[${MAY}]=31
+MONTH[${JUN}]=30
+MONTH[${JUL}]=31
+MONTH[${AUG}]=31
+MONTH[${SEP}]=30
+MONTH[${OCT}]=31
+MONTH[${NOV}]=30
+MONTH[${DEC}]=31
+#
+# Do Date
+#
+if [ "$DODATE" = "TRUE" ]
+then
+#
+# Check format of date
+#
+ if [ $IFORMAT = "a" ]
+ then
+  DAY="`echo $DATE | $AWK -F "/" '{print int($2)}'`"
+  MONTH="`echo $DATE | $AWK -F "/" '{print int($1)}'`"
+  YEAR="`echo $DATE | $AWK -F "/" '{print int($3)}'`"
+ elif [ $IFORMAT = "b" ]
+ then
+  DAY="`echo $DATE | $AWK -F "/" '{print int($1)}'`"
+  MONTH="`echo $DATE | $AWK -F "/" '{print int($2)}'`"
+  YEAR="`echo $DATE | $AWK -F "/" '{print int($3)}'`"
+ fi
+ YEAR="`_GetYear $YEAR`"
+ _CheckYear $YEAR
+ DATE=`printf "%02s/%02s/%4s" $DAY $MONTH $YEAR`
+ _CalcJulNum "$DATE"
+ echo "$JULN $YEAR"
+fi
+#
+# Do Julian Number
+#
+if [ "$DOJULN" = "TRUE" ]
+then
+ JULN="`echo $JULNYEAR | $AWK '{print int($1)}'`"
+ YEAR="`echo $JULNYEAR | $AWK '{print int($2)}'`"
+ YEAR="`_GetYear $YEAR`"
+ _CheckYear $YEAR
+ while [ $JULN -lt 1 ]
+ do
+  let "YEAR=YEAR-1"
+  JULN1=$JULN
+  _CalcJulNum "${MONTH[$DEC]}/${DEC}/${YEAR}"
+  let "JULN=JULN1+JULN+1"
+ done
+ _CalcDate $JULN $YEAR
+ if [ $OFORMAT = "a" ]
+ then
+  printf "%2.2d/%2.2d/%4d\n" ${MONTH} ${DAY} ${YEAR}
+ elif [ $OFORMAT = "b" ]
+ then
+  printf "%2.2d/%2.2d/%4d\n" ${DAY} ${MONTH} ${YEAR}
+ fi
+fi
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+DATE="1/1/1900"
+JULN="1"
+DODATE="FALSE"
+DOJULN="FALSE"
+IFORMAT="b"
+OFORMAT="b"
+MINYEAR="1900"
+MAXYEAR="2100"
+#
+# Initialise exit status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 [-d date] [-j number] [-i a|b] [-o a|b] [-f a|b] [-V Version]"
+while getopts d:j:i:o:f:V OPT
+do
+ case $OPT in
+#
+# Invalid option
+#
+        \?)
+                if [ -z "$OPTARG" ]
+                then
+                 echo $USAGE
+                 _exit 2
+                fi
+        ;;
+#
+# Date
+#
+	d)
+		DATE="$OPTARG"
+		DODATE="TRUE"
+	;;
+#
+# Julian Number
+#
+	j)
+		JULNYEAR="$OPTARG"
+		DOJULN="TRUE"
+	;;
+#
+# In format
+#
+        i)
+                IFORMAT="$OPTARG"
+        ;;
+#
+# Out format
+#
+        o)
+                OFORMAT="$OPTARG"
+        ;;
+#
+# In and out format
+#
+        f)
+                IFORMAT="$OPTARG"
+                OFORMAT="$OPTARG"
+        ;;
+#
+# Show version
+#
+	V)
+		SHOWVERSION="TRUE"
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit $EXITSTAT
+fi
+#
+# Check bounds of IFORMAT
+#
+case $IFORMAT in
+        a|A)
+                IFORMAT="a"
+        ;;
+        b|B)
+                IFORMAT="b"
+        ;;
+        *)
+                echo "ERROR : Invalid option - $FORMAT"
+                EXITSTAT=1
+                _exit $EXITSTAT
+        ;;
+esac
+#
+# Check bounds of OFORMAT
+#
+case $OFORMAT in
+        a|A)
+                OFORMAT="a"
+        ;;
+        b|B)
+                OFORMAT="b"
+        ;;
+        *)
+                echo "ERROR : Invalid option - $OFORMAT"
+                EXITSTAT=1
+                _exit $EXITSTAT
+        ;;
+esac
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+#
+NAME=$(basename $PWD)
+#
+RPMUSER="root"
+RHV="el6"
+HOMERPMU="$(cat /etc/passwd | grep -E "^${RPMUSER}:" | cut -d ":" -f6)"
+RPMBPATH="rpmbuild"
+REL="el6"
+#
+SPECFILE=${NAME}-${REL}.spec
+TARGET="i386"
+VERSION=$(cat $SPECFILE | grep "Version: " | cut -d ":" -f2 | sed -e s/" "//g)
+RELEASE=$(cat $SPECFILE | grep "Release: " | cut -d ":" -f2 | sed -e s/" "//g)
+RPMLOC="${HOMERPMU}/${RPMBPATH}/RPMS/${TARGET}"
+RPMSLOCL="${HOMERPMU}/${RPMBPATH}/SOURCES"
+RPMNAME=${NAME}-${VERSION}-${RELEASE}.${TARGET}.rpm
+#

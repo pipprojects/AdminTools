@@ -1,0 +1,237 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version			1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"	1.1     17 Nov 1997
+#
+# Rob Dancer    Set return status correctly	1.2     18 Nov 1997
+#
+# Rob Dancer    makedoc added version numbers	1.3     19 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+VERSION="2.0, 01 Dec 1997"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+
+
+_line () {
+ CHAR=$1
+ NUMCOL=$2
+ echo $CHAR | awk '{for ( i=0; i<'"$NUMCOL"'; i++ ) { printf "%s",$1}printf "\n"}'
+}
+
+
+_lineLength () {
+FILE=$1
+cat $FILE | awk 'BEGIN{LMAX=0}{LLEN=length($0); if ( LLEN > LMAX ){LMAX=LLEN}}END{print LMAX}'
+return $LENGTH
+}
+
+_printBar () {
+FILE=$1
+NUMCOL=`_lineLength $FILE`
+_line "-" $NUMCOL
+}
+
+_set1 () {
+LIST=$1
+for entry in $LIST
+do
+ i=$entry
+ echo
+ _printBar ${INFOFILE[$i]}
+ echo ${INFOSTRING[$i]}
+ cat ${INFOFILE[$i]}
+done
+}
+
+_set2 () {
+
+DISKCONF="Diskconfig.show"
+showdisks > $DISKCONF
+TMPFILE="/tmp/file.$$"
+printformatdevices -f $DISKCONF > $TMPFILE
+echo
+_printBar $TMPFILE
+echo "The filesystem is configured on the hardware as follows :"
+cat $TMPFILE
+rm $TMPFILE
+
+}
+
+_set3 () {
+
+TAPECONF="Tapeconfig.show"
+showtapes > $TAPECONF
+TMPFILE="/tmp/file.$$"
+printformatdevices -f $TAPECONF > $TMPFILE
+echo
+_printBar $TMPFILE
+echo "The tape drives are configured as follows :"
+cat $TMPFILE
+rm $TMPFILE
+}
+#
+# Main function
+#
+function _Main {
+#
+# Insert user function here
+#
+#
+EXT="inf"
+export HPUXVER=`cat HPUXVER.${EXT}`
+#
+INFOSTRING[0]="Uname -a gives :"
+INFOFILE[0]="uname.a.${EXT}"
+INFOSTRING[2]="The host entries for $HOST are :"
+INFOFILE[2]="`TMPFILE="/tmp/hosts.local.$$";cat hosts.inf | grep $HOST > $TMPFILE; echo $TMPFILE`"
+INFOSTRING[3]="lanscan gives :"
+INFOFILE[3]="lanscan.${EXT}"
+INFOSTRING[4]="ifconfig on the lans gives :"
+INFOFILE[4]="ifconfig.${EXT}"
+INFOSTRING[11]="Routing is :"
+INFOFILE[11]="netstat.rn.${EXT}"
+INFOSTRING[5]="The DNS entries are :"
+INFOFILE[5]="resolv.conf.${EXT}"
+INFOSTRING[7]="The swap is :"
+INFOFILE[7]="swapinfo.t.${EXT}"
+
+if [ "$HPUXVER" = "10" ]
+then
+ INFOSTRING[1]="model gives :"
+ INFOFILE[1]="model.${EXT}"
+ INFOSTRING[6]="The fstab entries are :"
+ INFOFILE[6]="fstab.${EXT}"
+ INFOSTRING[8]="The software bundles installed are as follows :"
+ INFOFILE[8]="swlist.l.bund.${EXT}"
+ INFOSTRING[9]="The software products installed are as follows :"
+ INFOFILE[9]="swlist.l.prod.${EXT}"
+ INFOSTRING[10]="The kernel is configured as follows :"
+ INFOFILE[10]="vmunix.${EXT}"
+ LIST="0 1 2 3 4 11 5 6 7 8 9 10"
+else
+ INFOSTRING[1]=""
+ INFOFILE[1]=""
+ INFOSTRING[6]="The checklist entries are :"
+ INFOFILE[6]="checklist.${EXT}"
+ INFOSTRING[8]="The software installed is as follows :"
+ INFOFILE[8]="filesets.${EXT}"
+ INFOSTRING[9]=""
+ INFOFILE[9]=""
+ INFOSTRING[10]="The kernel is configured as follows :"
+ INFOFILE[10]="hpux.${EXT}"
+ LIST="0 2 3 4 11 5 6 7 8 10"
+fi
+#
+_set1 "$LIST"
+_set2
+_set3
+#
+rm ${INFOFILE[2]}
+#
+# Set up return status
+#
+ RETSTAT=0
+}
+#
+# Start here
+#
+#
+# Source setup file
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Set up user variables
+#
+if [ -z "$COLUMNS" ]
+then
+ NUMCOL=80
+else
+ NUMCOL=$COLUMNS
+fi
+HOST=""
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Get command line options
+#
+USAGE="$0 -h host [-V Version]"
+set -- `getopt h:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Get hostname
+#
+	-h)
+		HOST=$2
+		shift 2
+	;;
+#
+# Show version
+#
+	-V)
+		SHOWVERSION="TRUE"
+		shift 1
+	;;
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Check bounds of OPTION
+#
+if [ -z "$HOST" ]
+then
+ echo "ERROR : Invalid host - $HOST"
+ _exit 1
+else
+ ping $HOST -n 1 > /dev/null 2>&1
+ if [ $? -ne 0 ]
+ then
+  echo "ERROR : Host down or unknown"
+  _exit 3
+ fi
+fi
+#
+# Do Main
+#
+_Main
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#

@@ -1,0 +1,164 @@
+#!/bin/ksh
+#
+#*****************************************************************************
+#
+# Name          Description                     Version Date
+#
+# Rob Dancer    Initial version                 1.0     11 Nov 1997
+#
+# Rob Dancer    Changed "Exit OK" to "Exit"     1.1     17 Nov 1997
+#
+# Rob Dancer    Added versions			1.2     17 Nov 1997
+#
+# Rob Dancer    References amended to           2.0     01 Dec 1997
+#               "admintools"
+#
+# Rob Dancer	Path to sendmail		2.1	27 November 2006
+#
+VERSION="2.1, 27 November 2006"
+#
+#*****************************************************************************
+#
+# Exit function
+#
+function _exit {
+ exit $1
+}
+#
+# Main function
+#
+function _monitorLog {
+ checklogfiles -n $NUMBERDAYS > $TMPFILE
+ NUMLINES=`cat $TMPFILE | wc -l`
+ if [ "$NUMLINES" -gt 0 ]
+ then
+  if [ "$NUMLINES" -eq 1 ]
+  then
+   PLURAL=""
+   THIRDP="has"
+  else
+   PLURAL="s"
+   THIRDP="have"
+  fi
+  if [ "$NUMBERDAYS" -eq 1 ]
+  then
+   PLURALDAYS=""
+   DAYTEXT="day${PLURALDAYS}"
+  else
+   PLURALDAYS="s"
+   DAYTEXT="$NUMBERDAYS day${PLURALDAYS}"
+  fi
+  STRING="The following file${PLURAL} ${THIRDP} been modified in the last $DAYTEXT"
+  echo "Subject: **LOG FILE WARNING ON `hostname`**""\n"$STRING | cat - $TMPFILE | /usr/sbin/sendmail $MAILREC
+ fi
+ RETSTAT=0
+}
+
+#
+# Start here
+#
+. /etc/admintools.src
+SHOWVERSION="FALSE"
+#
+# Initialise exits status
+#
+let "EXITSTAT=0"
+#
+# Set up user variables
+#
+NUMBERDAYS="1"
+MAILFILE="mailto.cfg"
+MINN=0
+MAXN=10
+#
+# Get command line options
+#
+USAGE="$0 [-n number_of_days] [-t mail_list_file] [-V Version]"
+set -- `getopt n:t:V $*`
+if [ $? -ne 0 ]
+then
+ echo $USAGE
+_exit 2
+fi
+while [ $# -gt 0 ]
+do
+ case $1 in
+#
+# Number of days
+#
+	-n)
+		NUMBERDAYS=$2
+		shift 2
+	;;
+#
+# Specify other mailto file
+#
+        -t)
+                MAILFILE=$2
+                shift 2
+        ;;
+#
+# Show version
+#
+        -V)
+                SHOWVERSION="TRUE"
+                shift 1
+	;;
+
+	--)
+		shift
+		break
+	;;
+ esac
+done
+#
+# Check for show version
+#
+if [ "$SHOWVERSION" = "TRUE" ]
+then
+ echo "$VERSION"
+ echo "$USAGE"
+ _exit 0
+fi
+#
+# Make number of days an integer
+#
+VALUE=`echo "$NUMBERDAYS" | awk '{print int($1)}'`
+#
+# Check bounds of OPTION
+#
+if [ "$NUMBERDAYS" -lt "$MINN" -o "$NUMBERDAYS" -gt "$MAXN" ]
+then
+ echo "ERROR : Invalid number of days - $NUMBERDAYS ($MINN to $MAXN)"
+ _exit 1
+else
+ NUMBERDAYS=$VALUE
+fi
+#
+# Set up mail receipients
+#
+if [ -r ${MAILFILE} ]
+then
+ MAILREC=`cat $MAILFILE`
+else
+ MAILREC="root@localhost"
+fi
+#
+TMPFILE="/tmp/tmpcheckfsfull.$$"
+#
+# Do monitorLog
+#
+_monitorLog
+#
+# Remove temporary file if it exists
+#
+if [ -f "$TMPFILE" ]
+then
+ rm $TMPFILE
+fi
+let "EXITSTAT=EXITSTAT+RETSTAT"
+#
+# Exit
+#
+_exit $EXITSTAT
+#
